@@ -1,14 +1,14 @@
-port module Main exposing (main)
+port module Main exposing (Entry, ListItem(..), Model, Msg(..), Transaction, initialModel, main, transactionDecoder, update, view)
 
 import Browser
 import Date exposing (Date)
-import Dict exposing (Dict)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, div, text)
 import Html.Attributes exposing (class)
 import Json.Decode
 import Json.Decode.Pipeline exposing (required)
+import List.Extra
 import Maybe exposing (withDefault)
 
 
@@ -79,42 +79,36 @@ update msg model =
 buildListItems : List Transaction -> List ListItem
 buildListItems txns =
     let
-        acc : Transaction -> Dict String (List ListItem) -> Dict String (List ListItem)
-        acc txn dict =
-            Dict.update (Date.toIsoString txn.date)
-                (\exists ->
-                    case exists of
-                        Nothing ->
-                            Just [ T txn ]
+        grouped : List ( Transaction, List Transaction )
+        grouped =
+            txns
+                |> List.sortWith
+                    (\a b ->
+                        case compare (Date.toIsoString b.date) (Date.toIsoString a.date) of
+                            EQ ->
+                                compare a.description b.description
 
-                        Just list ->
-                            Just (T txn :: list)
-                )
-                dict
+                            LT ->
+                                LT
 
-        groupedByDate : Dict String (List ListItem)
-        groupedByDate =
-            List.foldl acc Dict.empty txns
-
-        byDate : List (List ListItem)
-        byDate =
-            Dict.toList groupedByDate
-                |> List.sortBy Tuple.first
-                |> List.reverse
-                |> List.map Tuple.second
+                            GT ->
+                                GT
+                    )
+                |> List.Extra.groupWhile (\a b -> a.date == b.date)
 
         listItems : List ListItem
         listItems =
-            List.map
-                (\items ->
-                    case items of
-                        (T t) :: _ ->
-                            D t.date :: items
-
-                        _ ->
-                            items
-                )
-                byDate
+            grouped
+                |> List.map
+                    (\nonEmptyList ->
+                        let
+                            ( head, tail ) =
+                                nonEmptyList
+                        in
+                        D head.date
+                            :: T head
+                            :: List.map T tail
+                    )
                 |> List.concat
     in
     listItems
