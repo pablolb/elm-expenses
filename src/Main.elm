@@ -4,12 +4,15 @@ import Browser
 import Date exposing (Date)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, div, text)
-import Html.Attributes exposing (class)
+import Html exposing (Html, button, div, form, i, input, label, option, select, text)
+import Html.Attributes exposing (attribute, class, lang, name, placeholder, selected, step, type_, value)
+import Html.Events exposing (onClick, onInput)
 import Json.Decode
 import Json.Decode.Pipeline exposing (required)
 import List.Extra
 import Maybe exposing (withDefault)
+import Task
+import Time exposing (Month(..))
 
 
 
@@ -19,6 +22,10 @@ import Maybe exposing (withDefault)
 type alias Model =
     { transactions : List Transaction
     , listItems : List ListItem
+    , formInput : FormInput
+    , settings : Settings
+    , currentDate : Date
+    , currentPage : Page
     }
 
 
@@ -42,16 +49,60 @@ type ListItem
     | T Transaction
 
 
+type Page
+    = List
+    | Edit
+
+
+type alias Settings =
+    { destinationAccounts : List String
+    , sourceAccounts : List String
+    , defaultCurrency : String
+    }
+
+
+defaultSettings : Settings
+defaultSettings =
+    { destinationAccounts = [ "Expenses:Groceries", "Expenses:Eat Out & Take Away" ]
+    , sourceAccounts = [ "Assets:Cash", "Assets:Bank:Checking", "Liabilities:CreditCard" ]
+    , defaultCurrency = "USD"
+    }
+
+
+
+---- FORM STUFF ----
+
+
+type alias FormInput =
+    { date : String
+    , description : String
+    , source : String
+    , destination : String
+    , currency : String
+    , amount : String
+    }
+
+
+emptyFormInput : FormInput
+emptyFormInput =
+    { date = ""
+    , description = ""
+    , source = ""
+    , destination = ""
+    , currency = ""
+    , amount = ""
+    }
+
+
 initialModel : Model
 initialModel =
     { transactions = []
     , listItems = []
+    , formInput = emptyFormInput
+    , settings = defaultSettings
+    , currentDate = Date.fromCalendarDate 2024 Jan 1
+    , currentPage = List
     }
-
-
-init : ( Model, Cmd Msg )
-init =
-    ( initialModel, Cmd.none )
 
 
 
@@ -60,11 +111,77 @@ init =
 
 type Msg
     = GotTransactions (Result Json.Decode.Error (List Transaction))
+    | ReceiveDate Date
+    | SetPage Page
+    | EditDate String
+    | EditDescription String
+    | EditDestination String
+    | EditSource String
+    | EditAmount String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        ReceiveDate date ->
+            ( { model | currentDate = date }, Cmd.none )
+
+        SetPage Edit ->
+            ( { model | currentPage = Edit, formInput = defaultFormInput model }, Cmd.none )
+
+        SetPage page ->
+            ( { model | currentPage = page }, Cmd.none )
+
+        EditDate date ->
+            let
+                f =
+                    model.formInput
+
+                formInput =
+                    { f | date = date }
+            in
+            ( { model | formInput = formInput }, Cmd.none )
+
+        EditDescription description ->
+            let
+                f =
+                    model.formInput
+
+                formInput =
+                    { f | description = description }
+            in
+            ( { model | formInput = formInput }, Cmd.none )
+
+        EditDestination destination ->
+            let
+                f =
+                    model.formInput
+
+                formInput =
+                    { f | destination = destination }
+            in
+            ( { model | formInput = formInput }, Cmd.none )
+
+        EditSource source ->
+            let
+                f =
+                    model.formInput
+
+                formInput =
+                    { f | source = source }
+            in
+            ( { model | formInput = formInput }, Cmd.none )
+
+        EditAmount amount ->
+            let
+                f =
+                    model.formInput
+
+                formInput =
+                    { f | amount = amount }
+            in
+            ( { model | formInput = formInput }, Cmd.none )
+
         GotTransactions (Ok transactions) ->
             let
                 listItems =
@@ -121,12 +238,21 @@ buildListItems txns =
 view : Model -> Html Msg
 view model =
     div [ class "ui container" ]
-        [ viewListItems model.listItems
-        ]
+        [ renderPage model ]
 
 
-viewListItems : List ListItem -> Html Msg
-viewListItems listItems =
+renderPage : Model -> Html Msg
+renderPage model =
+    case model.currentPage of
+        List ->
+            viewListItems model
+
+        Edit ->
+            viewForm model
+
+
+viewListItems : Model -> Html Msg
+viewListItems model =
     div [ class "ui celled list" ]
         (List.map
             (\item ->
@@ -137,7 +263,10 @@ viewListItems listItems =
                     D date ->
                         viewDate date
             )
-            listItems
+            model.listItems
+            ++ [ button [ class "massive circular ui blue icon button fab", onClick (SetPage Edit) ]
+                    [ i [ class "plus icon" ] [] ]
+               ]
         )
 
 
@@ -207,6 +336,96 @@ viewAmount entry =
     div [ class "right floated content" ] [ text (entry.currency ++ " " ++ amount) ]
 
 
+viewForm : Model -> Html Msg
+viewForm model =
+    let
+        f : FormInput
+        f =
+            model.formInput
+    in
+    div []
+        [ form [ class "ui large form" ]
+            [ div [ class "field" ]
+                [ label [] [ text "Date" ]
+                , input
+                    [ name "date", type_ "date", value f.date, onInput EditDate ]
+                    []
+                ]
+            , div [ class "field" ]
+                [ label [] [ text "Description" ]
+                , input [ name "description", placeholder "Supermarket", value f.description, onInput EditDescription ] []
+                ]
+            , div [ class "field" ]
+                [ label [] [ text "Expense" ]
+                , select [ class "ui fluid dropdown", value f.destination, onInput EditDestination ] (destinationOptions model)
+                ]
+            , div [ class "field" ]
+                [ label [] [ text "Source" ]
+                , select [ class "ui fluid dropdown", value f.source, onInput EditSource ] (sourceOptions model)
+                ]
+            , div [ class "field" ]
+                [ label [] [ text "Amount" ]
+                , input
+                    [ type_ "number"
+                    , step "0.01"
+                    , placeholder "Amount"
+                    , attribute "inputmode" "decimal"
+                    , lang "en-US"
+                    , placeholder "10.99"
+                    , value f.amount
+                    , onInput EditAmount
+                    ]
+                    []
+                ]
+            , div [ class "ui button", onClick (SetPage List) ]
+                [ text "Cancel" ]
+            , div [ class "blue ui button right floated" ]
+                [ text "Submit" ]
+            ]
+        ]
+
+
+defaultFormInput : Model -> FormInput
+defaultFormInput model =
+    { date = Date.toIsoString model.currentDate
+    , description = ""
+    , destination = List.head model.settings.destinationAccounts |> Maybe.withDefault ""
+    , source = List.head model.settings.sourceAccounts |> Maybe.withDefault ""
+    , amount = ""
+    , currency = model.settings.defaultCurrency
+    }
+
+
+destinationOptions : Model -> List (Html Msg)
+destinationOptions model =
+    let
+        options : List String
+        options =
+            model.settings.destinationAccounts
+
+        selectedOpt : String
+        selectedOpt =
+            model.formInput.destination
+    in
+    options
+        |> List.map (\opt -> option [ value opt, selected (selectedOpt == opt) ] [ text opt ])
+
+
+sourceOptions : Model -> List (Html Msg)
+sourceOptions model =
+    let
+        options : List String
+        options =
+            model.settings.sourceAccounts
+
+        selectedOpt : String
+        selectedOpt =
+            model.formInput.source
+    in
+    options
+        |> List.map (\opt -> option [ value opt, selected (selectedOpt == opt) ] [ text opt ])
+
+
 
 ---- DECODERS ----
 
@@ -258,6 +477,16 @@ port gotTransactions : (Json.Decode.Value -> msg) -> Sub msg
 ---- PROGRAM ----
 
 
+initialCmd : Cmd Msg
+initialCmd =
+    Date.today |> Task.perform ReceiveDate
+
+
+init : () -> ( Model, Cmd Msg )
+init _ =
+    ( initialModel, initialCmd )
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     gotTransactions (decodeTransactions >> GotTransactions)
@@ -267,7 +496,7 @@ main : Program () Model Msg
 main =
     Browser.element
         { view = view
-        , init = \_ -> init
+        , init = init
         , update = update
         , subscriptions = subscriptions
         }
