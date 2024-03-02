@@ -1,10 +1,10 @@
-port module Main exposing (Entry, FormInput, FormValidation(..), ListItem(..), Model, Msg(..), Page(..), Transaction, defaultFormInput, initialModel, main, transactionDecoder, update, view)
+port module Main exposing (Entry, FormInput, FormResult, FormValidation(..), ListItem(..), Model, Msg(..), Page(..), Transaction, defaultFormInput, initialModel, main, transactionDecoder, update, validateForm, view)
 
 import Browser
 import Date exposing (Date)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, button, div, form, i, input, label, option, p, pre, select, text)
+import Html exposing (Html, button, div, form, h1, h2, i, input, label, option, p, pre, select, span, text)
 import Html.Attributes exposing (attribute, class, classList, lang, name, placeholder, selected, step, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Json.Decode
@@ -31,7 +31,19 @@ type alias Model =
 
 
 type alias Transaction =
-    { date : Date
+    { id : String
+    , version : String
+    , date : Date
+    , description : String
+    , destination : Entry
+    , source : Entry
+    }
+
+
+type alias JsonTransaction =
+    { id : String
+    , version : String
+    , date : String
     , description : String
     , destination : Entry
     , source : Entry
@@ -53,6 +65,7 @@ type ListItem
 type Page
     = List
     | Edit
+    | EditSettings
 
 
 type alias Settings =
@@ -75,7 +88,9 @@ defaultSettings =
 
 
 type alias FormInput =
-    { date : String
+    { id : String
+    , version : String
+    , date : String
     , description : String
     , source : String
     , destination : String
@@ -102,7 +117,9 @@ type FormValidation
 
 emptyFormInput : FormInput
 emptyFormInput =
-    { date = ""
+    { id = ""
+    , version = ""
+    , date = ""
     , description = ""
     , source = ""
     , destination = ""
@@ -131,12 +148,16 @@ type Msg
     = GotTransactions (Result Json.Decode.Error (List Transaction))
     | ReceiveDate Date
     | SetPage Page
+    | EditTransaction Transaction
+    | DeleteTransaction String String
     | EditDate String
     | EditDescription String
     | EditDestination String
     | EditSource String
     | EditAmount String
     | SubmitForm
+    | ImportSample
+    | DeleteAllData
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -156,6 +177,16 @@ update msg model =
 
         SetPage page ->
             ( { model | currentPage = page }, Cmd.none )
+
+        EditTransaction transaction ->
+            let
+                formInput =
+                    transactionFormInput transaction
+            in
+            ( { model | formInput = formInput, formValidation = None, currentPage = Edit }, Cmd.none )
+
+        DeleteTransaction id version ->
+            ( { model | currentPage = List }, deleteTransaction ( id, version ) )
 
         EditDate date ->
             let
@@ -217,8 +248,26 @@ update msg model =
 
                         Err error ->
                             Error error
+
+                cmd : Cmd Msg
+                cmd =
+                    case formValidation of
+                        Valid transaction ->
+                            transactionToJson transaction |> saveTransaction
+
+                        _ ->
+                            Cmd.none
+
+                page : Page
+                page =
+                    case formValidation of
+                        Valid _ ->
+                            List
+
+                        _ ->
+                            Edit
             in
-            ( { model | formValidation = formValidation }, Cmd.none )
+            ( { model | formValidation = formValidation, currentPage = page }, cmd )
 
         GotTransactions (Ok transactions) ->
             let
@@ -226,6 +275,12 @@ update msg model =
                     buildListItems transactions
             in
             ( { model | transactions = transactions, listItems = listItems }, Cmd.none )
+
+        ImportSample ->
+            ( { model | currentPage = List }, importSampleData () )
+
+        DeleteAllData ->
+            ( { model | currentPage = List }, deleteAllData () )
 
         _ ->
             ( model, Cmd.none )
@@ -301,7 +356,7 @@ validateForm input =
         transaction : Result String Transaction
         transaction =
             Result.map4
-                Transaction
+                (Transaction input.id input.version)
                 results.date
                 results.description
                 destination
@@ -351,15 +406,40 @@ renderPage : Model -> Html Msg
 renderPage model =
     case model.currentPage of
         List ->
-            viewListItems model
+            if List.isEmpty model.transactions then
+                viewEmptyState ()
+
+            else
+                viewListItems model
 
         Edit ->
             viewForm model
 
+        EditSettings ->
+            viewSettings model
+
+
+viewEmptyState : () -> Html Msg
+viewEmptyState _ =
+    div [ class "container" ]
+        [ h2 [ class "ui icon header middle aligned" ]
+            [ i [ class "money icon" ] []
+            , div [ class "content" ] [ text "Welcome to Elm Expenses!" ]
+            , div [ class "sub header" ] [ text "This is a work in progress" ]
+            ]
+        , div [ class "ui center aligned placeholder segment" ]
+            [ div [ class "ui positive button", onClick ImportSample ]
+                [ text "Import Sample" ]
+            , div [ class "ui horizontal divider" ] [ text "Or" ]
+            , div [ class "blue ui button", onClick (SetPage Edit) ]
+                [ text "Add Transaction" ]
+            ]
+        ]
+
 
 viewListItems : Model -> Html Msg
 viewListItems model =
-    div [ class "ui celled list" ]
+    div [ class "ui celled list relaxed" ]
         (List.map
             (\item ->
                 case item of
@@ -372,6 +452,8 @@ viewListItems model =
             model.listItems
             ++ [ button [ class "massive circular ui blue icon button fab", onClick (SetPage Edit) ]
                     [ i [ class "plus icon" ] [] ]
+               , button [ class "massive circular ui icon button fab-left", onClick (SetPage EditSettings) ]
+                    [ i [ class "settings icon" ] [] ]
                ]
         )
 
@@ -393,7 +475,7 @@ viewDate date =
 
 viewTransaction : Transaction -> Html Msg
 viewTransaction txn =
-    div [ class "item" ]
+    div [ class "item", onClick (EditTransaction txn) ]
         [ viewDescription txn
         , viewAmount txn.destination
         ]
@@ -409,7 +491,7 @@ viewDescription txn =
             accountShortName txn.destination.account
     in
     div [ class "left floated content" ]
-        [ div [] [ text txn.description ]
+        [ div [ class "header txn-description" ] [ text txn.description ]
         , div [ class "description" ] [ text (source ++ " ↦ " ++ destination) ]
         ]
 
@@ -542,22 +624,48 @@ viewForm model =
                     []
                 ]
             , viewFormValidationResult model
-            , button [ class "blue ui button right floated" ]
+            , button [ class "positive ui button right floated" ]
                 [ text "Submit" ]
-            , button [ class "ui button", onClick (SetPage List) ]
+            , div [ class "ui button", onClick (SetPage List) ]
                 [ text "Cancel" ]
+            , maybeViewDeleteButton f
             ]
         ]
 
 
+maybeViewDeleteButton : FormInput -> Html Msg
+maybeViewDeleteButton f =
+    if f.id /= "" then
+        div [ class "negative ui button", onClick (DeleteTransaction f.id f.version) ]
+            [ text "Delete" ]
+
+    else
+        span [] []
+
+
 defaultFormInput : Model -> FormInput
 defaultFormInput model =
-    { date = Date.toIsoString model.currentDate
+    { id = ""
+    , version = ""
+    , date = Date.toIsoString model.currentDate
     , description = ""
     , destination = List.head model.settings.destinationAccounts |> Maybe.withDefault ""
     , source = List.head model.settings.sourceAccounts |> Maybe.withDefault ""
     , amount = ""
     , currency = model.settings.defaultCurrency
+    }
+
+
+transactionFormInput : Transaction -> FormInput
+transactionFormInput txn =
+    { id = txn.id
+    , version = txn.version
+    , date = Date.toIsoString txn.date
+    , description = txn.description
+    , destination = txn.destination.account
+    , source = txn.source.account
+    , amount = toFloat txn.destination.amount / 100.0 |> String.fromFloat
+    , currency = txn.destination.currency
     }
 
 
@@ -697,6 +805,25 @@ buildTextEntries entries =
     List.map (String.join " ") padded
 
 
+viewSettings : Model -> Html Msg
+viewSettings model =
+    div []
+        [ form [ class "ui large form" ]
+            [ div [ class "ui button", onClick (SetPage List) ]
+                [ text "Cancel" ]
+            , div [ class "ui positive button", onClick ImportSample ]
+                [ text "Import Sample" ]
+            , div [ class "ui negative button", onClick DeleteAllData ]
+                [ text "Delete ALL Data" ]
+            ]
+        ]
+
+
+transactionToJson : Transaction -> JsonTransaction
+transactionToJson txn =
+    JsonTransaction txn.id txn.version (Date.toIsoString txn.date) txn.description txn.destination txn.source
+
+
 
 ---- DECODERS ----
 
@@ -712,6 +839,8 @@ entryDecoder =
 transactionDecoder : Json.Decode.Decoder Transaction
 transactionDecoder =
     Json.Decode.succeed Transaction
+        |> required "id" Json.Decode.string
+        |> required "version" Json.Decode.string
         |> required "date" dateDecoder
         |> required "description" Json.Decode.string
         |> required "destination" entryDecoder
@@ -765,6 +894,22 @@ isError res =
 
         _ ->
             False
+
+
+
+---- PORTS ELM => JS ----
+
+
+port saveTransaction : JsonTransaction -> Cmd msg
+
+
+port deleteTransaction : ( String, String ) -> Cmd msg
+
+
+port importSampleData : () -> Cmd msg
+
+
+port deleteAllData : () -> Cmd msg
 
 
 

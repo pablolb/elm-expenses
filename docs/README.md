@@ -1,24 +1,11 @@
-We are using github pages to publish our small Elm webapp.
+# An ongoing series of building a small Elm Application
 
-For example, to build the [part-4](./part-4/) version, we created this `elmapp.config.js` file locally:
+You can start by reading the [first post of the series](https://blog.mrbelloc.dev/posts/trying-out-elm-1/)!
 
-```javascript
-module.exports = {
-  homepage: "https://pablolb.github.io/elm-expenses/part-4",
-};
-```
-
-Then we simply build the application, and move it:
-
-```bash
-elm-app build
-mv build/ docs/part-4
-```
-
-To build with the debugger, we run it like this:
-
-```bash
-ELM_DEBUGGER=true elm-app build
-```
-
-You can look at the sections [Building for Relative Paths](https://github.com/halfzebra/create-elm-app/blob/master/template/README.md#building-for-relative-paths) and [Turning on/off Elm Debugger](https://github.com/halfzebra/create-elm-app/blob/master/template/README.md#turning-onoff-elm-debugger) of [Create Elm App User Guide](https://github.com/halfzebra/create-elm-app/blob/master/template/README.md).
+| Blog                                                                         | App                                                    | App + Elm Debugger                                           |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
+| [Setup Elm, choose tools](https://blog.mrbelloc.dev/posts/trying-out-elm-1/) | [link](https://pablolb.github.io/elm-expenses/part-1/) |                                                              |
+| [Write tests, refactor](https://blog.mrbelloc.dev/posts/trying-out-elm-2/)   | [link](https://pablolb.github.io/elm-expenses/part-2/) |                                                              |
+| [Create edit form](https://blog.mrbelloc.dev/posts/trying-out-elm-3/)        | [link](https://pablolb.github.io/elm-expenses/part-3/) | [link](https://pablolb.github.io/elm-expenses/part-3-debug/) |
+| [Form validation](https://blog.mrbelloc.dev/posts/trying-out-elm-4/)         | [link](https://pablolb.github.io/elm-expenses/part-4/) | [link](https://pablolb.github.io/elm-expenses/part-4-debug/) |
+| [Persistence](https://blog.mrbelloc.dev/posts/trying-out-elm-5/)             | [link](https://pablolb.github.io/elm-expenses/part-5/) | [link](https://pablolb.github.io/elm-expenses/part-5-debug/) |

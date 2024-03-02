@@ -1,11 +1,77 @@
 import './main.css';
 import { Elm } from './Main.elm';
 import * as serviceWorker from './serviceWorker';
+import PouchDb from 'pouchdb-browser';
 
-const app = Elm.Main.init({
-  node: document.getElementById('root')
-});
-app.ports.gotTransactions.send([
+
+async function main() {
+  let db = new PouchDb('elm_expenses_local');
+
+  const app = Elm.Main.init({
+    node: document.getElementById('root')
+  });
+
+  app.ports.saveTransaction.subscribe(async function(elmTxn) {
+    const txn = mapTxnFromElm(elmTxn);
+    setRandomId(txn);
+    await db.put(txn);
+    await sendTransactionsToElm(); 
+  });
+
+  app.ports.deleteTransaction.subscribe(async function(idAndVersion) {
+    const [id, version] = idAndVersion;
+    await db.remove(id, version);
+    await sendTransactionsToElm();
+  });
+
+  app.ports.deleteAllData.subscribe(async function() {
+    await db.destroy();
+    db = new PouchDb('elm_expenses_local');
+    await sendTransactionsToElm(); 
+  });
+
+  app.ports.importSampleData.subscribe(async function() {
+    const toImport = sample.map(t => {
+      setRandomId(t);
+      return t;
+    });
+    await db.bulkDocs(toImport);
+    await sendTransactionsToElm(); 
+  });
+
+  async function sendTransactionsToElm() {
+    const result = await db.allDocs({include_docs: true, descending: true});
+    app.ports.gotTransactions.send(result.rows.map(row => mapTxnToElm(row.doc)));
+  }
+
+  await sendTransactionsToElm();
+}
+
+function mapTxnFromElm(doc) {
+  doc._id = doc.id;
+  doc._rev = doc.version;
+  delete doc.id;
+  delete doc.version;
+  return doc;
+}
+
+function mapTxnToElm(doc) {
+  doc.id = doc._id;
+  doc.version = doc._rev;
+  delete doc._id;
+  delete doc._rev;
+  return doc;
+}
+
+function setRandomId(txn) {
+  if (txn._id != "") {
+    return;
+  }
+  txn._id = (txn.date + "-" + window.crypto.randomUUID());
+  delete txn._rev;
+}
+
+const sample = [
   {
     "date": "2023-02-01",
     "description": "Rent payment",
@@ -734,7 +800,9 @@ app.ports.gotTransactions.send([
       "currency": "USD"
     }
   }
-]);
+];
+
+main();
 
 // If you want your app to work offline and load faster, you can change
 // unregister() to register() below. Note this comes with some pitfalls.

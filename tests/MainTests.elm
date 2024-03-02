@@ -7,15 +7,15 @@ import Json.Decode exposing (decodeString)
 import Main exposing (..)
 import Test exposing (..)
 import Test.Html.Query as Query
-import Test.Html.Selector exposing (attribute, class, tag)
+import Test.Html.Selector exposing (all, attribute, class, classes, containing, tag, text)
 import Time exposing (Month(..))
 
 
 transactionDecoderTest : Test
 transactionDecoderTest =
     let
-        expected : Transaction
-        expected =
+        sample : Transaction
+        sample =
             buildTransaction
                 (TransactionInput
                     2023
@@ -26,11 +26,16 @@ transactionDecoderTest =
                     "Assets:Cash"
                     3599
                 )
+
+        expected =
+            { sample | id = "SomeId", version = "SomeVersion" }
     in
     test "It decodes transactions" <|
         \_ ->
             """
             {
+                "id": "SomeId",
+                "version": "SomeVersion",
                 "date": "2023-12-29",
                 "description": "Supermarket",
                 "destination": {
@@ -110,7 +115,9 @@ editViewResetsForm =
     let
         formInput : FormInput
         formInput =
-            { date = "2024-03-03"
+            { id = ""
+            , version = ""
+            , date = "2024-03-03"
             , description = "Pizza"
             , destination = "Expenses:Eat Out & Take Away"
             , source = "Liabilities:CreditCard"
@@ -217,12 +224,54 @@ editAmountSetsAmountInFormInput =
                 |> Expect.equal "-10.000,99"
 
 
+submitFormValidatesTheForm : Test
+submitFormValidatesTheForm =
+    let
+        badFormInput : FormInput
+        badFormInput =
+            { id = ""
+            , version = ""
+            , date = "2024-03-03"
+            , description = ""
+            , destination = "Expenses:Groceries"
+            , source = "Assets:Cash"
+            , amount = ""
+            , currency = "USD"
+            }
+
+        expected : FormResult
+        expected =
+            { date = Ok (Date.fromCalendarDate 2024 Mar 3)
+            , description = Err "Description cannot be blank"
+            , destination = Ok "Expenses:Groceries"
+            , source = Ok "Assets:Cash"
+            , amount = Err "Invalid amount: "
+            , currency = Ok "USD"
+            }
+
+        model =
+            { initialModel
+                | formInput = badFormInput
+                , currentPage = Edit
+            }
+    in
+    test "When the form is submitted, we validate the current input and set the result in the model" <|
+        \_ ->
+            model
+                |> update SubmitForm
+                |> Tuple.first
+                |> .formValidation
+                |> Expect.equal (Error expected)
+
+
 editPageRendersFormInput : Test
 editPageRendersFormInput =
     let
         formInput : FormInput
         formInput =
-            { date = "2024-03-03"
+            { id = ""
+            , version = ""
+            , date = "2024-03-03"
             , description = "Pizza"
             , destination = "Expenses:Eat Out & Take Away"
             , source = "Liabilities:CreditCard"
@@ -266,6 +315,147 @@ editPageRendersFormInput =
                 |> view
                 |> Query.fromHtml
                 |> Expect.all expectations
+
+
+editPageRendersValidationErrors : Test
+editPageRendersValidationErrors =
+    let
+        badFormInput : FormInput
+        badFormInput =
+            { id = ""
+            , version = ""
+            , date = "2024-03-03"
+            , description = ""
+            , destination = "Expenses:Groceries"
+            , source = "Assets:Cash"
+            , amount = ""
+            , currency = "USD"
+            }
+
+        formResult : FormResult
+        formResult =
+            { date = Ok (Date.fromCalendarDate 2024 Mar 3)
+            , description = Err "Description cannot be blank"
+            , destination = Ok "Expenses:Groceries"
+            , source = Ok "Assets:Cash"
+            , amount = Err "Invalid amount: "
+            , currency = Ok "USD"
+            }
+
+        model =
+            { initialModel
+                | formInput = badFormInput
+                , formValidation = Error formResult
+                , currentPage = Edit
+            }
+
+        expectations : List (Query.Single Msg -> Expect.Expectation)
+        expectations =
+            [ \q ->
+                q
+                    |> Query.has
+                        [ all
+                            [ tag "div"
+                            , classes [ "field", "error" ]
+                            , containing [ tag "input", attribute (name "description") ]
+                            ]
+                        ]
+            , \q ->
+                q
+                    |> Query.has
+                        [ all
+                            [ tag "div"
+                            , classes [ "field", "error" ]
+                            , containing [ tag "input", attribute (name "amount") ]
+                            ]
+                        ]
+            , \q ->
+                q
+                    |> Query.has
+                        [ all
+                            [ tag "div"
+                            , classes [ "ui", "error", "message" ]
+                            , all
+                                [ containing [ tag "p", text "Description cannot be blank" ]
+                                , containing [ tag "p", text "Invalid amount:" ]
+                                ]
+                            ]
+                        ]
+            ]
+    in
+    test "Edit Form renders validation errors" <|
+        \_ ->
+            model
+                |> view
+                |> Query.fromHtml
+                |> Expect.all expectations
+
+
+testValidateFormError : Test
+testValidateFormError =
+    let
+        badFormInput : FormInput
+        badFormInput =
+            { id = ""
+            , version = ""
+            , date = ""
+            , description = ""
+            , destination = ""
+            , source = ""
+            , amount = ""
+            , currency = ""
+            }
+
+        expected : FormResult
+        expected =
+            { date = Err "Expected a date in ISO 8601 format"
+            , description = Err "Description cannot be blank"
+            , destination = Err "Destination cannot be blank"
+            , source = Err "Source cannot be blank"
+            , amount = Err "Invalid amount: "
+            , currency = Err "Currency cannot be blank"
+            }
+    in
+    test "validateForm where all are errors" <|
+        \_ ->
+            badFormInput
+                |> validateForm
+                |> Expect.equal (Err expected)
+
+
+testValidateFormSuccess : Test
+testValidateFormSuccess =
+    let
+        badFormInput : FormInput
+        badFormInput =
+            { id = ""
+            , version = ""
+            , date = "2024-03-01"
+            , description = "Supermarket"
+            , destination = "Expenses:Groceries"
+            , source = "Assets:Cash"
+            , amount = "19.9"
+            , currency = "USD"
+            }
+
+        expected : Transaction
+        expected =
+            buildTransaction
+                (TransactionInput
+                    2024
+                    Mar
+                    1
+                    "Supermarket"
+                    "Expenses:Groceries"
+                    "Assets:Cash"
+                    1990
+                )
+    in
+    test "validateForm where there are no are errors" <|
+        \_ ->
+            badFormInput
+                |> validateForm
+                |> Expect.equal (Ok expected)
 
 
 {-| Builds a list of Transactions, and a list of expected ListItems.
@@ -343,6 +533,8 @@ type alias TransactionInput =
 buildTransaction : TransactionInput -> Transaction
 buildTransaction input =
     Transaction
+        ""
+        ""
         (Date.fromCalendarDate input.year input.month input.day)
         input.description
         (Entry input.destination "USD" input.amount)

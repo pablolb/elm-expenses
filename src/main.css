@@ -10,7 +10,7 @@
 }
 
 div.date {
-  background-color: rgb(189, 182, 182);
+  background-color: #ebeaea;
   padding-top: 4px;
   font-size: 1.2rem;
   color:#64696e;
@@ -18,9 +18,18 @@ div.date {
   position: sticky;
 }
 
+div.txn-description {
+  padding-bottom: .42857143em;
+}
+
 .fab {
   position: fixed;
   bottom: 20px;
   right: 20px;
 }
-  
+
+.fab-left {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+}
