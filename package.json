@@ -1,5 +1,12 @@
 {
   "dependencies": {
     "pouchdb-browser": "^8.0.1"
+  },
+  "devDependencies": {
+    "cypress": "^13.6.6"
+  },
+  "scripts": {
+    "cypress": "cypress run",
+    "cypress:open": "cypress open"
   }
 }

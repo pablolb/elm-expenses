@@ -123,6 +123,8 @@ editViewResetsForm =
             , source = "Liabilities:CreditCard"
             , amount = "19.90"
             , currency = "USD"
+            , extraDestinations = []
+            , extraSources = []
             }
 
         transaction : Transaction
@@ -237,6 +239,8 @@ submitFormValidatesTheForm =
             , source = "Assets:Cash"
             , amount = ""
             , currency = "USD"
+            , extraDestinations = []
+            , extraSources = []
             }
 
         expected : FormResult
@@ -277,6 +281,8 @@ editPageRendersFormInput =
             , source = "Liabilities:CreditCard"
             , amount = "19.90"
             , currency = "EUR"
+            , extraDestinations = []
+            , extraSources = []
             }
 
         model : Model
@@ -330,6 +336,8 @@ editPageRendersValidationErrors =
             , source = "Assets:Cash"
             , amount = ""
             , currency = "USD"
+            , extraDestinations = []
+            , extraSources = []
             }
 
         formResult : FormResult
@@ -404,6 +412,8 @@ testValidateFormError =
             , source = ""
             , amount = ""
             , currency = ""
+            , extraDestinations = []
+            , extraSources = []
             }
 
         expected : FormResult
@@ -436,6 +446,8 @@ testValidateFormSuccess =
             , source = "Assets:Cash"
             , amount = "19.9"
             , currency = "USD"
+            , extraDestinations = []
+            , extraSources = []
             }
 
         expected : Transaction

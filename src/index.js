@@ -3,6 +3,8 @@ import { Elm } from './Main.elm';
 import * as serviceWorker from './serviceWorker';
 import PouchDb from 'pouchdb-browser';
 
+const exposeJsApi = process.env.ELM_APP_EXPOSE_TEST_JS == 'true';
+
 
 async function main() {
   let db = new PouchDb('elm_expenses_local');
@@ -11,12 +13,13 @@ async function main() {
     node: document.getElementById('root')
   });
 
-  app.ports.saveTransaction.subscribe(async function(elmTxn) {
+  async function saveTransaction(elmTxn) {
     const txn = mapTxnFromElm(elmTxn);
     setRandomId(txn);
     await db.put(txn);
     await sendTransactionsToElm(); 
-  });
+  }
+  app.ports.saveTransaction.subscribe(saveTransaction);
 
   app.ports.deleteTransaction.subscribe(async function(idAndVersion) {
     const [id, version] = idAndVersion;
@@ -24,24 +27,55 @@ async function main() {
     await sendTransactionsToElm();
   });
 
-  app.ports.deleteAllData.subscribe(async function() {
+  async function deleteAllData() {
     await db.destroy();
     db = new PouchDb('elm_expenses_local');
     await sendTransactionsToElm(); 
-  });
+  }
 
-  app.ports.importSampleData.subscribe(async function() {
+  app.ports.deleteAllData.subscribe(deleteAllData);
+
+  async function importSampleData() {
     const toImport = sample.map(t => {
       setRandomId(t);
       return t;
     });
     await db.bulkDocs(toImport);
     await sendTransactionsToElm(); 
-  });
+  }
+  app.ports.importSampleData.subscribe(importSampleData);
 
   async function sendTransactionsToElm() {
     const result = await db.allDocs({include_docs: true, descending: true});
     app.ports.gotTransactions.send(result.rows.map(row => mapTxnToElm(row.doc)));
+  }
+
+  async function putTransaction(txnInput) {
+    const txn = {
+      id: "",
+      version: "",
+      date: txnInput.date,
+      description: txnInput.description,
+      destination: {
+        account: txnInput.destination,
+        currency: txnInput.currency,
+        amount: txnInput.amount
+      },
+      source: {
+        account: txnInput.source,
+        currency: txnInput.currency,
+        amount: -1 * txnInput.amount
+      }
+    };
+    return saveTransaction(txn);
+  }
+
+  if (exposeJsApi) {
+    window.ElmExpenses = {
+      deleteAllData,
+      importSampleData,
+      putTransaction,
+    };
   }
 
   await sendTransactionsToElm();

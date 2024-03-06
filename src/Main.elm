@@ -96,6 +96,8 @@ type alias FormInput =
     , destination : String
     , currency : String
     , amount : String
+    , extraDestinations : List String
+    , extraSources : List String
     }
 
 
@@ -125,6 +127,8 @@ emptyFormInput =
     , destination = ""
     , currency = ""
     , amount = ""
+    , extraDestinations = []
+    , extraSources = []
     }
 
 
@@ -396,6 +400,11 @@ isAmountValid a =
 ---- VIEW ----
 
 
+cyAttr : String -> Html.Attribute Msg
+cyAttr name =
+    attribute "data-cy" name
+
+
 view : Model -> Html Msg
 view model =
     div [ class "ui container" ]
@@ -428,10 +437,10 @@ viewEmptyState _ =
             , div [ class "sub header" ] [ text "This is a work in progress" ]
             ]
         , div [ class "ui center aligned placeholder segment" ]
-            [ div [ class "ui positive button", onClick ImportSample ]
+            [ button [ class "ui positive button", cyAttr "import", onClick ImportSample ]
                 [ text "Import Sample" ]
             , div [ class "ui horizontal divider" ] [ text "Or" ]
-            , div [ class "blue ui button", onClick (SetPage Edit) ]
+            , button [ class "blue ui button", cyAttr "add-transaction", onClick (SetPage Edit) ]
                 [ text "Add Transaction" ]
             ]
         ]
@@ -593,25 +602,26 @@ viewForm model =
             [ div [ class "field", classList [ ( "error", isDateError ) ] ]
                 [ label [] [ text "Date" ]
                 , input
-                    [ name "date", type_ "date", value f.date, onInput EditDate ]
+                    [ name "date", cyAttr "date", type_ "date", value f.date, onInput EditDate ]
                     []
                 ]
             , div [ class "field", classList [ ( "error", isDescriptionError ) ] ]
                 [ label [] [ text "Description" ]
-                , input [ name "description", placeholder "Supermarket", value f.description, onInput EditDescription ] []
+                , input [ name "description", cyAttr "description", placeholder "Supermarket", value f.description, onInput EditDescription ] []
                 ]
             , div [ class "field", classList [ ( "error", isDestinationError ) ] ]
                 [ label [] [ text "Expense" ]
-                , select [ class "ui fluid dropdown", name "destination", onInput EditDestination ] (destinationOptions model)
+                , select [ class "ui fluid dropdown", cyAttr "destination", name "destination", onInput EditDestination ] (destinationOptions model)
                 ]
             , div [ class "field", classList [ ( "error", isSourceError ) ] ]
                 [ label [] [ text "Source" ]
-                , select [ class "ui fluid dropdown", name "source", onInput EditSource ] (sourceOptions model)
+                , select [ class "ui fluid dropdown", cyAttr "source", name "source", onInput EditSource ] (sourceOptions model)
                 ]
             , div [ class "field", classList [ ( "error", isAmountError ) ] ]
                 [ label [] [ text "Amount" ]
                 , input
                     [ name "amount"
+                    , cyAttr "amount"
                     , type_ "number"
                     , step "0.01"
                     , placeholder "Amount"
@@ -624,7 +634,7 @@ viewForm model =
                     []
                 ]
             , viewFormValidationResult model
-            , button [ class "positive ui button right floated" ]
+            , button [ class "positive ui button right floated", cyAttr "submit" ]
                 [ text "Submit" ]
             , div [ class "ui button", onClick (SetPage List) ]
                 [ text "Cancel" ]
@@ -636,7 +646,7 @@ viewForm model =
 maybeViewDeleteButton : FormInput -> Html Msg
 maybeViewDeleteButton f =
     if f.id /= "" then
-        div [ class "negative ui button", onClick (DeleteTransaction f.id f.version) ]
+        div [ class "negative ui button", cyAttr "delete", onClick (DeleteTransaction f.id f.version) ]
             [ text "Delete" ]
 
     else
@@ -653,6 +663,8 @@ defaultFormInput model =
     , source = List.head model.settings.sourceAccounts |> Maybe.withDefault ""
     , amount = ""
     , currency = model.settings.defaultCurrency
+    , extraDestinations = []
+    , extraSources = []
     }
 
 
@@ -666,6 +678,8 @@ transactionFormInput txn =
     , source = txn.source.account
     , amount = toFloat txn.destination.amount / 100.0 |> String.fromFloat
     , currency = txn.destination.currency
+    , extraDestinations = [ txn.destination.account ]
+    , extraSources = [ txn.source.account ]
     }
 
 
@@ -674,7 +688,8 @@ destinationOptions model =
     let
         options : List String
         options =
-            model.settings.destinationAccounts
+            (model.settings.destinationAccounts ++ model.formInput.extraDestinations)
+                |> List.Extra.unique
 
         selectedOpt : String
         selectedOpt =
@@ -689,7 +704,8 @@ sourceOptions model =
     let
         options : List String
         options =
-            model.settings.sourceAccounts
+            (model.settings.sourceAccounts ++ model.formInput.extraSources)
+                |> List.Extra.unique
 
         selectedOpt : String
         selectedOpt =
