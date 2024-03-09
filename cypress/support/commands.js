@@ -1,15 +1,21 @@
 Cypress.Commands.add(
+    'createDefaultSettings',
+    () => cy.window().its('ElmExpenses').then(e => e.saveSettings({
+        version: "",
+        defaultCurrency: "USD",
+        destinationAccounts: [ "Expenses:Groceries", "Expenses:Eat Out & Take Away" ],
+        sourceAccounts: [ "Assets:Cash", "Assets:Bank:Checking", "Liabilities:CreditCard" ]
+    }))
+)
+
+Cypress.Commands.add(
     'importSampleData',
     () => cy.window().its('ElmExpenses').then(e => e.importSampleData())
 )
 
 Cypress.Commands.add(
-    'deleteIndexedDB',
-    () => cy.window()
-        .its('indexedDB')
-        .then(
-            indexedDB => indexedDB.deleteDatabase('_pouch_elm_expenses_local')
-        )
+    'deleteAllData',
+    () => cy.window().its('ElmExpenses').then(e => e.deleteAllData())
 )
 
 Cypress.Commands.add(

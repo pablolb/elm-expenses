@@ -10,3 +10,4 @@ You can start by reading the [first post of the series](https://blog.mrbelloc.de
 | [Form validation](https://blog.mrbelloc.dev/posts/trying-out-elm-4/)         | [link](https://pablolb.github.io/elm-expenses/part-4/) | [link](https://pablolb.github.io/elm-expenses/part-4-debug/) |
 | [Persistence](https://blog.mrbelloc.dev/posts/trying-out-elm-5/)             | [link](https://pablolb.github.io/elm-expenses/part-5/) | [link](https://pablolb.github.io/elm-expenses/part-5-debug/) |
 | [End-To-End Tests](https://blog.mrbelloc.dev/posts/trying-out-elm-6/)        | [link](https://pablolb.github.io/elm-expenses/part-6/) | [link](https://pablolb.github.io/elm-expenses/part-6-debug/) |
+| [Edit Settings, BDD](https://blog.mrbelloc.dev/posts/trying-out-elm-7/)      | [link](https://pablolb.github.io/elm-expenses/part-7/) | [link](https://pablolb.github.io/elm-expenses/part-7-debug/) |

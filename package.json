@@ -3,7 +3,11 @@
     "pouchdb-browser": "^8.0.1"
   },
   "devDependencies": {
-    "cypress": "^13.6.6"
+    "@badeball/cypress-cucumber-preprocessor": "^20.0.2",
+    "@bahmutov/cypress-esbuild-preprocessor": "^2.2.0",
+    "cypress": "^13.6.6",
+    "cypress-multi-reporters": "^1.6.4",
+    "elm-test": "^0.19.1-revision12"
   },
   "scripts": {
     "cypress": "cypress run",

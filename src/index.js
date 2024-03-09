@@ -8,10 +8,39 @@ const exposeJsApi = process.env.ELM_APP_EXPOSE_TEST_JS == 'true';
 
 async function main() {
   let db = new PouchDb('elm_expenses_local');
+  let settingsDb = new PouchDb('elm_expenses_settings');
 
   const app = Elm.Main.init({
     node: document.getElementById('root')
   });
+
+  async function loadSettings() {
+    try {
+      const settings = await settingsDb.get('settings');
+      await sendSettingsToElm(settings);
+      await sendTransactionsToElm();
+    } catch (e) {
+      if (e.name == "not_found") {
+        app.ports.gotFirstRun.send();
+      } else {
+        console.log("Error loading settings", e);
+      }
+    }
+  }
+
+  async function saveSettings(elmSettings) {
+    const settings = {...elmSettings};
+    settings._id = "settings";
+    if (settings.version != "") {
+      settings._rev = settings.version;
+    }
+    delete settings.version;
+    const resp = await settingsDb.put(settings);
+    settings._rev = resp.rev;
+    await sendSettingsToElm(settings);
+  }
+  app.ports.saveSettings.subscribe(saveSettings);
+
 
   async function saveTransaction(elmTxn) {
     const txn = mapTxnFromElm(elmTxn);
@@ -30,7 +59,9 @@ async function main() {
   async function deleteAllData() {
     await db.destroy();
     db = new PouchDb('elm_expenses_local');
-    await sendTransactionsToElm(); 
+    await settingsDb.destroy();
+    settingsDb = new PouchDb('elm_expenses_settings');
+    await sendTransactionsToElm();
   }
 
   app.ports.deleteAllData.subscribe(deleteAllData);
@@ -48,6 +79,13 @@ async function main() {
   async function sendTransactionsToElm() {
     const result = await db.allDocs({include_docs: true, descending: true});
     app.ports.gotTransactions.send(result.rows.map(row => mapTxnToElm(row.doc)));
+  }
+
+  async function sendSettingsToElm(settings) {
+    settings.version = settings._rev;
+    delete settings._rev;
+    delete settings.id;
+    app.ports.gotSettings.send(settings);
   }
 
   async function putTransaction(txnInput) {
@@ -75,10 +113,11 @@ async function main() {
       deleteAllData,
       importSampleData,
       putTransaction,
+      saveSettings,
     };
   }
 
-  await sendTransactionsToElm();
+  await loadSettings();
 }
 
 function mapTxnFromElm(doc) {
@@ -107,730 +146,674 @@ function setRandomId(txn) {
 
 const sample = [
   {
-    "date": "2023-02-01",
-    "description": "Rent payment",
+    "date": "2021-01-10",
+    "description": "Utility bill payment",
     "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 120000,
+      "account": "Expenses:Utilities",
+      "amount": 6000,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Housing",
-      "amount": -120000,
+      "account": "Assets:Bank",
+      "amount": -6000,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-02-02",
-    "description": "Utilities bill",
+    "date": "2021-02-18",
+    "description": "Healthcare expenses",
     "destination": {
-      "account": "Assets:Bank:Checking",
+      "account": "Expenses:Healthcare",
       "amount": 8500,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Utilities",
+      "account": "Assets:Cash",
       "amount": -8500,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-02-02",
-    "description": "Coffee shop latte",
+    "date": "2021-03-05",
+    "description": "Home office supplies",
     "destination": {
-      "account": "Assets:Cash",
-      "amount": 400,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Personal Care",
-      "amount": -400,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-03",
-    "description": "Streaming service subscription",
-    "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 900,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -900,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-03",
-    "description": "Groceries",
-    "destination": {
-      "account": "Assets:Bank:Checking",
+      "account": "Expenses:Office:HomeOffice",
       "amount": 4200,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Groceries",
+      "account": "Assets:CreditCard",
       "amount": -4200,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-02-06",
-    "description": "Gym membership renewal",
+    "date": "2021-04-15",
+    "description": "Car fuel purchase",
     "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 5900,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Health & Fitness",
-      "amount": -5900,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-07",
-    "description": "Movie tickets",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 2200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -2200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-08",
-    "description": "Restaurant dinner",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 7800,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Dining Out",
-      "amount": -7800,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-09",
-    "description": "Phone bill",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 6200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Utilities",
-      "amount": -6200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-10",
-    "description": "Car wash",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 1400,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Auto",
-      "amount": -1400,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-10",
-    "description": "Haircut",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 3200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Personal Care",
-      "amount": -3200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-13",
-    "description": "Donation to charity",
-    "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 2500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Giving",
-      "amount": -2500,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-14",
-    "description": "Lunch at work",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 1200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Dining Out",
-      "amount": -1200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-15",
-    "description": "Streaming service purchase",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 300,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -300,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-16",
-    "description": "Coffee shop muffin",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 300,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Personal Care",
-      "amount": -300,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-17",
-    "description": "Gas fill-up",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 3800,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Auto",
-      "amount": -3800,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-18",
-    "description": "Online shopping purchase",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 4500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Other",
-      "amount": -4500,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-20",
-    "description": "Concert tickets",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 6500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -6500,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-21",
-    "description": "Grocery delivery fee",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Groceries",
-      "amount": -500,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-21",
-    "description": "Birthday gift for friend",
-    "destination": {
-      "account": "Assets:Bank:Checking",
+      "account": "Expenses:Transportation:Fuel",
       "amount": 3000,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Gifts",
+      "account": "Assets:Bank",
       "amount": -3000,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-02-22",
-    "description": "Streaming service tip",
+    "date": "2021-05-20",
+    "description": "Grocery shopping",
     "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-23",
-    "description": "Public transportation pass",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 3200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Transportation",
-      "amount": -3200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-24",
-    "description": "Doctor's appointment copay",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 2000,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Health & Fitness",
-      "amount": -2000,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-25",
-    "description": "Pizza delivery",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 2700,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Dining Out",
-      "amount": -2700,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-27",
-    "description": "Phone case purchase",
-    "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 1800,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Personal Care",
-      "amount": -1800,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-02-28",
-    "description": "Parking garage fee",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 1200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Transportation",
-      "amount": -1200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-01",
-    "description": "Streaming service subscription renewal",
-    "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 1200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -1200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-02",
-    "description": "New book purchase",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 2400,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -2400,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-03",
-    "description": "Lunch at work",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 1000,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Dining Out",
-      "amount": -1000,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-04",
-    "description": "Donation to animal shelter",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 3500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Giving",
-      "amount": -3500,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-06",
-    "description": "Coffee shop latte",
-    "destination": {
-      "account": "Assets:Cash",
-      "amount": 400,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Personal Care",
-      "amount": -400,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-07",
-    "description": "Gym membership fee",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 3900,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Health & Fitness",
-      "amount": -3900,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-08",
-    "description": "Movie tickets for friends",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 3600,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -3600,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-09",
-    "description": "Concert tickets",
-    "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 8500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -8500,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-10",
-    "description": "Grocery delivery fee",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 700,
-      "currency": "USD"
-    },
-    "source": {
       "account": "Expenses:Groceries",
-      "amount": -700,
+      "amount": 4800,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -4800,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-11",
-    "description": "Haircut",
+    "date": "2021-06-12",
+    "description": "Home improvement",
     "destination": {
-      "account": "Assets:Cash",
+      "account": "Expenses:Home:Improvement",
+      "amount": 10500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -10500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2021-07-08",
+    "description": "Entertainment expenses",
+    "destination": {
+      "account": "Expenses:Entertainment",
       "amount": 3800,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Personal Care",
+      "account": "Assets:Cash",
       "amount": -3800,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-13",
-    "description": "Streaming service purchase",
+    "date": "2021-08-25",
+    "description": "Electronics purchase",
     "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 400,
+      "account": "Expenses:Electronics",
+      "amount": 6700,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -400,
+      "account": "Assets:CreditCard",
+      "amount": -6700,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-14",
-    "description": "Gas fill-up",
+    "date": "2021-09-14",
+    "description": "Gym membership renewal",
     "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 4300,
+      "account": "Expenses:Health:Gym",
+      "amount": 9000,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Auto",
-      "amount": -4300,
+      "account": "Assets:Bank",
+      "amount": -9000,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-15",
-    "description": "Birthday gift for coworker",
+    "date": "2021-10-03",
+    "description": "Clothing purchase",
     "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 2000,
+      "account": "Expenses:Clothing",
+      "amount": 3200,
       "currency": "USD"
     },
     "source": {
+      "account": "Assets:CreditCard",
+      "amount": -3200,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2021-11-18",
+    "description": "Dental checkup",
+    "destination": {
+      "account": "Expenses:Health:Dental",
+      "amount": 6000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -6000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2021-12-22",
+    "description": "Holiday gift shopping",
+    "destination": {
       "account": "Expenses:Gifts",
-      "amount": -2000,
+      "amount": 4800,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -4800,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-16",
-    "description": "Coffee shop smoothie",
+    "date": "2022-01-05",
+    "description": "Internet bill payment",
     "destination": {
+      "account": "Expenses:Utilities:Internet",
+      "amount": 5500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -5500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2022-02-20",
+    "description": "Medical expenses",
+    "destination": {
+      "account": "Expenses:Health:Medical",
+      "amount": 8000,
+      "currency": "USD"
+    },
+    "source": {
       "account": "Assets:Cash",
-      "amount": 500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Personal Care",
-      "amount": -500,
+      "amount": -8000,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-17",
-    "description": "Online shopping purchase (clothing)",
+    "date": "2022-03-10",
+    "description": "Clothing purchase",
     "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 6200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Other",
-      "amount": -6200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-18",
-    "description": "Restaurant dinner with family",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 12500,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Dining Out",
-      "amount": -12500,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-20",
-    "description": "Donation to environmental charity",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 5000,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Giving",
-      "amount": -5000,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-21",
-    "description": "Streaming service tip",
-    "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 200,
-      "currency": "USD"
-    },
-    "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -200,
-      "currency": "USD"
-    }
-  },
-  {
-    "date": "2023-03-22",
-    "description": "New plant for home",
-    "destination": {
-      "account": "Assets:Cash",
+      "account": "Expenses:Clothing",
       "amount": 3500,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Other",
+      "account": "Assets:CreditCard",
       "amount": -3500,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-23",
-    "description": "Phone repair",
+    "date": "2022-04-15",
+    "description": "Home energy bill",
     "destination": {
-      "account": "Liabilities:CreditCard",
-      "amount": 7800,
+      "account": "Expenses:Utilities:Energy",
+      "amount": 7500,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Other",
-      "amount": -7800,
+      "account": "Assets:Bank",
+      "amount": -7500,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-24",
-    "description": "Pizza delivery",
+    "date": "2022-05-08",
+    "description": "Office supplies",
     "destination": {
-      "account": "Assets:Cash",
-      "amount": 2300,
+      "account": "Expenses:Office",
+      "amount": 4200,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Dining Out",
-      "amount": -2300,
+      "account": "Assets:CreditCard",
+      "amount": -4200,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-25",
-    "description": "Haircut (touch-up)",
+    "date": "2022-06-22",
+    "description": "Car maintenance",
     "destination": {
-      "account": "Assets:Cash",
+      "account": "Expenses:Transportation:CarMaintenance",
+      "amount": 9800,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -9800,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2022-07-12",
+    "description": "Movie night",
+    "destination": {
+      "account": "Expenses:Entertainment:Movies",
       "amount": 2500,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Personal Care",
+      "account": "Assets:Cash",
       "amount": -2500,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-27",
-    "description": "Coffee shop pastry",
+    "date": "2022-08-30",
+    "description": "Home improvement",
     "destination": {
-      "account": "Assets:Cash",
-      "amount": 300,
+      "account": "Expenses:Home:Improvement",
+      "amount": 10500,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Personal Care",
-      "amount": -300,
+      "account": "Assets:CreditCard",
+      "amount": -10500,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-28",
-    "description": "Movie rental",
+    "date": "2022-09-18",
+    "description": "Dental checkup",
     "destination": {
-      "account": "Assets:Bank:Checking",
-      "amount": 500,
+      "account": "Expenses:Health:Dental",
+      "amount": 6500,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Entertainment",
-      "amount": -500,
+      "account": "Assets:Bank",
+      "amount": -6500,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-29",
-    "description": "Parking garage fee",
+    "date": "2022-10-05",
+    "description": "Subscription renewal",
     "destination": {
-      "account": "Assets:Cash",
-      "amount": 1500,
+      "account": "Expenses:Subscriptions",
+      "amount": 2000,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Transportation",
-      "amount": -1500,
+      "account": "Assets:CreditCard",
+      "amount": -2000,
       "currency": "USD"
     }
   },
   {
-    "date": "2023-03-30",
+    "date": "2022-11-15",
+    "description": "Hiking equipment",
+    "destination": {
+      "account": "Expenses:Outdoor:Equipment",
+      "amount": 8900,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -8900,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2022-12-22",
+    "description": "Holiday travel expenses",
+    "destination": {
+      "account": "Expenses:Travel",
+      "amount": 12000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -12000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-01-01",
     "description": "Grocery shopping",
     "destination": {
-      "account": "Assets:Bank:Checking",
+      "account": "Expenses:Groceries",
+      "amount": 4500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -4500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-02-15",
+    "description": "Monthly rent",
+    "destination": {
+      "account": "Expenses:Rent",
+      "amount": 150000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -150000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-03-05",
+    "description": "Dinner at a restaurant",
+    "destination": {
+      "account": "Expenses:Dining",
+      "amount": 3500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -3500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-04-20",
+    "description": "Gasoline purchase",
+    "destination": {
+      "account": "Expenses:Transportation",
+      "amount": 2500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Cash",
+      "amount": -2500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-05-10",
+    "description": "Phone bill payment",
+    "destination": {
+      "account": "Expenses:Utilities:Phone",
+      "amount": 6000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -6000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-06-08",
+    "description": "Bookstore purchase",
+    "destination": {
+      "account": "Expenses:Books",
+      "amount": 1800,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -1800,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-07-15",
+    "description": "Health insurance payment",
+    "destination": {
+      "account": "Expenses:Insurance:Health",
+      "amount": 12000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -12000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-08-22",
+    "description": "Electronics store purchase",
+    "destination": {
+      "account": "Expenses:Electronics",
+      "amount": 7500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -7500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-09-10",
+    "description": "Gym membership renewal",
+    "destination": {
+      "account": "Expenses:Health:Gym",
+      "amount": 9000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -9000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-10-05",
+    "description": "Home maintenance supplies",
+    "destination": {
+      "account": "Expenses:Home:Maintenance",
+      "amount": 3500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -3500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-11-18",
+    "description": "Car insurance premium",
+    "destination": {
+      "account": "Expenses:Insurance:Auto",
+      "amount": 18000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -18000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2023-12-03",
+    "description": "Holiday gift shopping",
+    "destination": {
+      "account": "Expenses:Gifts",
+      "amount": 5000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -5000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-01-08",
+    "description": "Internet subscription renewal",
+    "destination": {
+      "account": "Expenses:Utilities:Internet",
+      "amount": 5500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -5500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-02-14",
+    "description": "Medical checkup",
+    "destination": {
+      "account": "Expenses:Health:MedicalCheckup",
       "amount": 7200,
       "currency": "USD"
     },
     "source": {
-      "account": "Expenses:Groceries",
+      "account": "Assets:Cash",
       "amount": -7200,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-03-02",
+    "description": "Home office equipment",
+    "destination": {
+      "account": "Expenses:Office:HomeOfficeEquipment",
+      "amount": 9500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -9500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-04-15",
+    "description": "Car repair",
+    "destination": {
+      "account": "Expenses:Transportation:CarRepair",
+      "amount": 12500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -12500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-05-20",
+    "description": "Grocery shopping",
+    "destination": {
+      "account": "Expenses:Groceries",
+      "amount": 5200,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -5200,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-06-10",
+    "description": "Home renovation",
+    "destination": {
+      "account": "Expenses:Home:Renovation",
+      "amount": 18500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -18500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-07-08",
+    "description": "Concert tickets",
+    "destination": {
+      "account": "Expenses:Entertainment:Concerts",
+      "amount": 4200,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Cash",
+      "amount": -4200,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-08-25",
+    "description": "Electronics upgrade",
+    "destination": {
+      "account": "Expenses:Electronics",
+      "amount": 8500,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -8500,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-09-14",
+    "description": "Fitness classes",
+    "destination": {
+      "account": "Expenses:Health:FitnessClasses",
+      "amount": 7200,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -7200,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-10-03",
+    "description": "Clothing and accessories",
+    "destination": {
+      "account": "Expenses:Clothing",
+      "amount": 3800,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -3800,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-11-18",
+    "description": "Dental cleaning",
+    "destination": {
+      "account": "Expenses:Health:DentalCleaning",
+      "amount": 6000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:Bank",
+      "amount": -6000,
+      "currency": "USD"
+    }
+  },
+  {
+    "date": "2024-12-22",
+    "description": "Holiday travel expenses",
+    "destination": {
+      "account": "Expenses:Travel",
+      "amount": 11000,
+      "currency": "USD"
+    },
+    "source": {
+      "account": "Assets:CreditCard",
+      "amount": -11000,
       "currency": "USD"
     }
   }

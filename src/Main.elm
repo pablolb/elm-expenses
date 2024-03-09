@@ -4,13 +4,15 @@ import Browser
 import Date exposing (Date)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, button, div, form, h1, h2, i, input, label, option, p, pre, select, span, text)
-import Html.Attributes exposing (attribute, class, classList, lang, name, placeholder, selected, step, type_, value)
+import Html exposing (Html, button, div, form, h1, h2, i, input, label, node, option, p, pre, select, span, text, textarea)
+import Html.Attributes exposing (attribute, class, classList, id, lang, list, name, placeholder, selected, step, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Json.Decode
 import Json.Decode.Pipeline exposing (required)
 import List.Extra
 import Maybe exposing (withDefault)
+import Misc exposing (isError, isFieldNotBlank, keepError)
+import Settings as EditSettings exposing (Msg(..), Settings, decodeSettings)
 import Task
 import Time exposing (Month(..))
 
@@ -25,6 +27,8 @@ type alias Model =
     , formInput : FormInput
     , formValidation : FormValidation
     , settings : Settings
+    , editSettingsState : EditSettings.State
+    , settingsStatus : SettingsStatus
     , currentDate : Date
     , currentPage : Page
     }
@@ -63,24 +67,16 @@ type ListItem
 
 
 type Page
-    = List
+    = Welcome
+    | List
     | Edit
     | EditSettings
 
 
-type alias Settings =
-    { destinationAccounts : List String
-    , sourceAccounts : List String
-    , defaultCurrency : String
-    }
-
-
-defaultSettings : Settings
-defaultSettings =
-    { destinationAccounts = [ "Expenses:Groceries", "Expenses:Eat Out & Take Away" ]
-    , sourceAccounts = [ "Assets:Cash", "Assets:Bank:Checking", "Liabilities:CreditCard" ]
-    , defaultCurrency = "USD"
-    }
+type SettingsStatus
+    = SettingsUnknown
+    | NoSettings
+    | SettingsLoaded
 
 
 
@@ -138,7 +134,9 @@ initialModel =
     , listItems = []
     , formInput = emptyFormInput
     , formValidation = None
-    , settings = defaultSettings
+    , settings = EditSettings.defaultSettings
+    , editSettingsState = EditSettings.emptyState
+    , settingsStatus = SettingsUnknown
     , currentDate = Date.fromCalendarDate 2024 Jan 1
     , currentPage = List
     }
@@ -160,13 +158,28 @@ type Msg
     | EditSource String
     | EditAmount String
     | SubmitForm
+    | GotSettings (Result Json.Decode.Error Settings)
+    | GotFirstRun
     | ImportSample
-    | DeleteAllData
+    | EditSettingsMsg EditSettings.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        GotFirstRun ->
+            let
+                editSettingsState =
+                    getSettingsFormInput model.settings
+            in
+            ( { model
+                | settingsStatus = NoSettings
+                , currentPage = Welcome
+                , editSettingsState = { editSettingsState | showCancelButton = False }
+              }
+            , Cmd.none
+            )
+
         ReceiveDate date ->
             ( { model | currentDate = date }, Cmd.none )
 
@@ -175,6 +188,14 @@ update msg model =
                 | currentPage = Edit
                 , formInput = defaultFormInput model
                 , formValidation = None
+              }
+            , Cmd.none
+            )
+
+        SetPage EditSettings ->
+            ( { model
+                | currentPage = EditSettings
+                , editSettingsState = getSettingsFormInput model.settings
               }
             , Cmd.none
             )
@@ -273,6 +294,38 @@ update msg model =
             in
             ( { model | formValidation = formValidation, currentPage = page }, cmd )
 
+        EditSettingsMsg settingsMsg ->
+            let
+                ( editSettingsState, cmd, cancel ) =
+                    EditSettings.update settingsMsg model.editSettingsState
+
+                currentPage =
+                    if cancel then
+                        if settingsMsg == DeleteAllData then
+                            Welcome
+
+                        else
+                            List
+
+                    else
+                        model.currentPage
+
+                ( settings, settingsStatus, showCancelButton ) =
+                    if settingsMsg == DeleteAllData then
+                        ( EditSettings.defaultSettings, NoSettings, False )
+
+                    else
+                        ( model.settings, model.settingsStatus, editSettingsState.showCancelButton )
+            in
+            ( { model
+                | editSettingsState = { editSettingsState | showCancelButton = showCancelButton }
+                , currentPage = currentPage
+                , settings = settings
+                , settingsStatus = settingsStatus
+              }
+            , cmd |> Cmd.map EditSettingsMsg
+            )
+
         GotTransactions (Ok transactions) ->
             let
                 listItems =
@@ -281,10 +334,10 @@ update msg model =
             ( { model | transactions = transactions, listItems = listItems }, Cmd.none )
 
         ImportSample ->
-            ( { model | currentPage = List }, importSampleData () )
+            ( { model | currentPage = List }, EditSettings.importSampleData () )
 
-        DeleteAllData ->
-            ( { model | currentPage = List }, deleteAllData () )
+        GotSettings (Ok settings) ->
+            ( { model | settings = settings, settingsStatus = SettingsLoaded, currentPage = List }, Cmd.none )
 
         _ ->
             ( model, Cmd.none )
@@ -369,19 +422,6 @@ validateForm input =
     transaction |> Result.mapError (\_ -> results)
 
 
-isFieldNotBlank : String -> String -> Result String String
-isFieldNotBlank name value =
-    let
-        trimmed =
-            String.trim value
-    in
-    if String.isEmpty trimmed then
-        Err (name ++ " cannot be blank")
-
-    else
-        Ok trimmed
-
-
 isAmountValid : String -> Result String Int
 isAmountValid a =
     case String.toFloat a of
@@ -414,9 +454,12 @@ view model =
 renderPage : Model -> Html Msg
 renderPage model =
     case model.currentPage of
+        Welcome ->
+            viewWelcome model
+
         List ->
             if List.isEmpty model.transactions then
-                viewEmptyState ()
+                viewEmptyList
 
             else
                 viewListItems model
@@ -425,11 +468,23 @@ renderPage model =
             viewForm model
 
         EditSettings ->
-            viewSettings model
+            EditSettings.viewForm model.editSettingsState |> Html.map EditSettingsMsg
 
 
-viewEmptyState : () -> Html Msg
-viewEmptyState _ =
+viewWelcome : Model -> Html Msg
+viewWelcome model =
+    div [ class "container" ]
+        [ h2 [ class "ui icon header middle aligned" ]
+            [ i [ class "money icon" ] []
+            , div [ class "content" ] [ text "Welcome to Elm Expenses!" ]
+            , div [ class "sub header" ] [ text "This is a work in progress" ]
+            ]
+        , EditSettings.viewForm model.editSettingsState |> Html.map EditSettingsMsg
+        ]
+
+
+viewEmptyList : Html Msg
+viewEmptyList =
     div [ class "container" ]
         [ h2 [ class "ui icon header middle aligned" ]
             [ i [ class "money icon" ] []
@@ -437,7 +492,7 @@ viewEmptyState _ =
             , div [ class "sub header" ] [ text "This is a work in progress" ]
             ]
         , div [ class "ui center aligned placeholder segment" ]
-            [ button [ class "ui positive button", cyAttr "import", onClick ImportSample ]
+            [ button [ class "ui positive button", cyAttr "import-sample", onClick ImportSample ]
                 [ text "Import Sample" ]
             , div [ class "ui horizontal divider" ] [ text "Or" ]
             , button [ class "blue ui button", cyAttr "add-transaction", onClick (SetPage Edit) ]
@@ -459,9 +514,9 @@ viewListItems model =
                         viewDate date
             )
             model.listItems
-            ++ [ button [ class "massive circular ui blue icon button fab", onClick (SetPage Edit) ]
+            ++ [ button [ class "massive circular ui blue icon button fab", cyAttr "add-transaction", onClick (SetPage Edit) ]
                     [ i [ class "plus icon" ] [] ]
-               , button [ class "massive circular ui icon button fab-left", onClick (SetPage EditSettings) ]
+               , button [ class "massive circular ui icon button fab-left", cyAttr "settings", onClick (SetPage EditSettings) ]
                     [ i [ class "settings icon" ] [] ]
                ]
         )
@@ -683,6 +738,19 @@ transactionFormInput txn =
     }
 
 
+getSettingsFormInput : Settings -> EditSettings.State
+getSettingsFormInput settings =
+    { inputs =
+        { version = settings.version
+        , defaultCurrency = settings.defaultCurrency
+        , destinationAccounts = String.join "\n" settings.destinationAccounts
+        , sourceAccounts = String.join "\n" settings.sourceAccounts
+        }
+    , results = Nothing
+    , showCancelButton = True
+    }
+
+
 destinationOptions : Model -> List (Html Msg)
 destinationOptions model =
     let
@@ -731,15 +799,6 @@ viewFormValidationResult model =
 viewFormErrors : Model -> Html Msg
 viewFormErrors model =
     let
-        keepError : Result String a -> Maybe String
-        keepError res =
-            case res of
-                Ok _ ->
-                    Nothing
-
-                Err err ->
-                    Just err
-
         dropSuccess : Result String a -> Result String String
         dropSuccess res =
             Result.map (\_ -> "") res
@@ -821,20 +880,6 @@ buildTextEntries entries =
     List.map (String.join " ") padded
 
 
-viewSettings : Model -> Html Msg
-viewSettings model =
-    div []
-        [ form [ class "ui large form" ]
-            [ div [ class "ui button", onClick (SetPage List) ]
-                [ text "Cancel" ]
-            , div [ class "ui positive button", onClick ImportSample ]
-                [ text "Import Sample" ]
-            , div [ class "ui negative button", onClick DeleteAllData ]
-                [ text "Delete ALL Data" ]
-            ]
-        ]
-
-
 transactionToJson : Transaction -> JsonTransaction
 transactionToJson txn =
     JsonTransaction txn.id txn.version (Date.toIsoString txn.date) txn.description txn.destination txn.source
@@ -882,36 +927,6 @@ decodeTransactions jsonData =
     Json.Decode.decodeValue (Json.Decode.list transactionDecoder) jsonData
 
 
-isNothing : Maybe a -> Bool
-isNothing m =
-    case m of
-        Nothing ->
-            True
-
-        _ ->
-            False
-
-
-isSomething : Maybe a -> Bool
-isSomething m =
-    case m of
-        Nothing ->
-            False
-
-        _ ->
-            True
-
-
-isError : Result a b -> Bool
-isError res =
-    case res of
-        Err _ ->
-            True
-
-        _ ->
-            False
-
-
 
 ---- PORTS ELM => JS ----
 
@@ -922,17 +937,17 @@ port saveTransaction : JsonTransaction -> Cmd msg
 port deleteTransaction : ( String, String ) -> Cmd msg
 
 
-port importSampleData : () -> Cmd msg
-
-
-port deleteAllData : () -> Cmd msg
-
-
 
 ---- PORTS JS => ELM ----
 
 
+port gotFirstRun : (Json.Decode.Value -> msg) -> Sub msg
+
+
 port gotTransactions : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port gotSettings : (Json.Decode.Value -> msg) -> Sub msg
 
 
 
@@ -951,7 +966,11 @@ init _ =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    gotTransactions (decodeTransactions >> GotTransactions)
+    Sub.batch
+        [ gotTransactions (decodeTransactions >> GotTransactions)
+        , gotSettings (decodeSettings >> GotSettings)
+        , gotFirstRun (\_ -> GotFirstRun)
+        ]
 
 
 main : Program () Model Msg
