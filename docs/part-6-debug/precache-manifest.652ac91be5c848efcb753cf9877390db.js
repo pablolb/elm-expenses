@@ -24,7 +24,7 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/elm-expenses/part-6-debug/favicon.ico"
   },
   {
-    "revision": "3e51d3cc43801deb7ede6d6e1d2a24ef",
+    "revision": "44553ff46fdf846b3b505c88a38d39a6",
     "url": "/elm-expenses/part-6-debug/index.html"
   },
   {
@@ -40,20 +40,20 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/elm-expenses/part-6-debug/semantic.min.js"
   },
   {
-    "revision": "e9675a53e9b37b7c32a0",
+    "revision": "7783d34d85c170801d96",
     "url": "/elm-expenses/part-6-debug/static/css/main.f5561b2d.chunk.css"
   },
   {
-    "revision": "e9675a53e9b37b7c32a0",
-    "url": "/elm-expenses/part-6-debug/static/js/main.e9675a53.chunk.js"
+    "revision": "7783d34d85c170801d96",
+    "url": "/elm-expenses/part-6-debug/static/js/main.7783d34d.chunk.js"
   },
   {
     "revision": "eef2590c80dbde1ac686",
     "url": "/elm-expenses/part-6-debug/static/js/runtime~main.eef2590c.js"
   },
   {
-    "revision": "ec59c72b91acb5d7061b",
-    "url": "/elm-expenses/part-6-debug/static/js/vendors~main.ec59c72b.chunk.js"
+    "revision": "69a19d6e879c243979c7",
+    "url": "/elm-expenses/part-6-debug/static/js/vendors~main.69a19d6e.chunk.js"
   },
   {
     "revision": "13db00b7a34fee4d819ab7f9838cc428",

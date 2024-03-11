@@ -1,7 +1,7 @@
 {
   "main.css": "/elm-expenses/part-7-debug/static/css/main.f5561b2d.chunk.css",
-  "main.js": "/elm-expenses/part-7-debug/static/js/main.53cbab1b.chunk.js",
-  "main.js.map": "/elm-expenses/part-7-debug/static/js/main.53cbab1b.chunk.js.map",
+  "main.js": "/elm-expenses/part-7-debug/static/js/main.f2dd3b58.chunk.js",
+  "main.js.map": "/elm-expenses/part-7-debug/static/js/main.f2dd3b58.chunk.js.map",
   "runtime~main.js": "/elm-expenses/part-7-debug/static/js/runtime~main.ec09faa0.js",
   "runtime~main.js.map": "/elm-expenses/part-7-debug/static/js/runtime~main.ec09faa0.js.map",
   "vendors~main.js": "/elm-expenses/part-7-debug/static/js/vendors~main.69a19d6e.chunk.js",
@@ -15,7 +15,7 @@
   "favicon.ico": "/elm-expenses/part-7-debug/favicon.ico",
   "index.html": "/elm-expenses/part-7-debug/index.html",
   "manifest.json": "/elm-expenses/part-7-debug/manifest.json",
-  "precache-manifest.b2e71a529bdb864695ab062dd49cf6eb.js": "/elm-expenses/part-7-debug/precache-manifest.b2e71a529bdb864695ab062dd49cf6eb.js",
+  "precache-manifest.d41df28a5b8a668e7213473c2a2fd8a3.js": "/elm-expenses/part-7-debug/precache-manifest.d41df28a5b8a668e7213473c2a2fd8a3.js",
   "semantic.min.css": "/elm-expenses/part-7-debug/semantic.min.css",
   "semantic.min.js": "/elm-expenses/part-7-debug/semantic.min.js",
   "themes/default/assets/fonts/brand-icons.eot": "/elm-expenses/part-7-debug/themes/default/assets/fonts/brand-icons.eot",
