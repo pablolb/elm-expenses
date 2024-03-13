@@ -1,20 +1,21 @@
-port module Main exposing (Entry, FormInput, FormResult, FormValidation(..), ListItem(..), Model, Msg(..), Page(..), Transaction, defaultFormInput, initialModel, main, transactionDecoder, update, validateForm, view)
+port module Main exposing (ListItem(..), Model, Msg(..), Page(..), defaultFormInput, initialModel, main, update, view)
 
 import Browser
 import Date exposing (Date)
+import EditTransaction
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, button, div, form, h1, h2, i, input, label, node, option, p, pre, select, span, text, textarea)
 import Html.Attributes exposing (attribute, class, classList, id, lang, list, name, placeholder, selected, step, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Json.Decode
-import Json.Decode.Pipeline exposing (required)
 import List.Extra
 import Maybe exposing (withDefault)
 import Misc exposing (isError, isFieldNotBlank, keepError)
 import Settings as EditSettings exposing (Msg(..), Settings, decodeSettings)
 import Task
 import Time exposing (Month(..))
+import Transactions exposing (Entry, Transaction, decodeTransactions)
 
 
 
@@ -24,40 +25,12 @@ import Time exposing (Month(..))
 type alias Model =
     { transactions : List Transaction
     , listItems : List ListItem
-    , formInput : FormInput
-    , formValidation : FormValidation
+    , editTransactionState : EditTransaction.State
     , settings : Settings
     , editSettingsState : EditSettings.State
     , settingsStatus : SettingsStatus
     , currentDate : Date
     , currentPage : Page
-    }
-
-
-type alias Transaction =
-    { id : String
-    , version : String
-    , date : Date
-    , description : String
-    , destination : Entry
-    , source : Entry
-    }
-
-
-type alias JsonTransaction =
-    { id : String
-    , version : String
-    , date : String
-    , description : String
-    , destination : Entry
-    , source : Entry
-    }
-
-
-type alias Entry =
-    { account : String
-    , currency : String
-    , amount : Int
     }
 
 
@@ -83,57 +56,11 @@ type SettingsStatus
 ---- FORM STUFF ----
 
 
-type alias FormInput =
-    { id : String
-    , version : String
-    , date : String
-    , description : String
-    , source : String
-    , destination : String
-    , currency : String
-    , amount : String
-    , extraDestinations : List String
-    , extraSources : List String
-    }
-
-
-type alias FormResult =
-    { date : Result String Date
-    , description : Result String String
-    , destination : Result String String
-    , source : Result String String
-    , amount : Result String Int
-    , currency : Result String String
-    }
-
-
-type FormValidation
-    = None
-    | Error FormResult
-    | Valid Transaction
-
-
-emptyFormInput : FormInput
-emptyFormInput =
-    { id = ""
-    , version = ""
-    , date = ""
-    , description = ""
-    , source = ""
-    , destination = ""
-    , currency = ""
-    , amount = ""
-    , extraDestinations = []
-    , extraSources = []
-    }
-
-
 initialModel : Model
 initialModel =
     { transactions = []
     , listItems = []
-    , formInput = emptyFormInput
-    , formValidation = None
+    , editTransactionState = EditTransaction.emptyState
     , settings = EditSettings.defaultSettings
     , editSettingsState = EditSettings.emptyState
     , settingsStatus = SettingsUnknown
@@ -151,16 +78,10 @@ type Msg
     | ReceiveDate Date
     | SetPage Page
     | EditTransaction Transaction
-    | DeleteTransaction String String
-    | EditDate String
-    | EditDescription String
-    | EditDestination String
-    | EditSource String
-    | EditAmount String
-    | SubmitForm
     | GotSettings (Result Json.Decode.Error Settings)
     | GotFirstRun
     | ImportSample
+    | EditTransactionMsg EditTransaction.Msg
     | EditSettingsMsg EditSettings.Msg
 
 
@@ -186,8 +107,11 @@ update msg model =
         SetPage Edit ->
             ( { model
                 | currentPage = Edit
-                , formInput = defaultFormInput model
-                , formValidation = None
+                , editTransactionState =
+                    { input = defaultFormInput model
+                    , results = Nothing
+                    , settings = model.settings
+                    }
               }
             , Cmd.none
             )
@@ -205,94 +129,29 @@ update msg model =
 
         EditTransaction transaction ->
             let
-                formInput =
-                    transactionFormInput transaction
+                editTransactionState =
+                    transactionFormInput transaction model.settings
             in
-            ( { model | formInput = formInput, formValidation = None, currentPage = Edit }, Cmd.none )
+            ( { model | editTransactionState = editTransactionState, currentPage = Edit }, Cmd.none )
 
-        DeleteTransaction id version ->
-            ( { model | currentPage = List }, deleteTransaction ( id, version ) )
-
-        EditDate date ->
+        EditTransactionMsg txnMsg ->
             let
-                f =
-                    model.formInput
+                ( editTransactionState, cmd, close ) =
+                    EditTransaction.update txnMsg model.editTransactionState
 
-                formInput =
-                    { f | date = date }
-            in
-            ( { model | formInput = formInput }, Cmd.none )
-
-        EditDescription description ->
-            let
-                f =
-                    model.formInput
-
-                formInput =
-                    { f | description = description }
-            in
-            ( { model | formInput = formInput }, Cmd.none )
-
-        EditDestination destination ->
-            let
-                f =
-                    model.formInput
-
-                formInput =
-                    { f | destination = destination }
-            in
-            ( { model | formInput = formInput }, Cmd.none )
-
-        EditSource source ->
-            let
-                f =
-                    model.formInput
-
-                formInput =
-                    { f | source = source }
-            in
-            ( { model | formInput = formInput }, Cmd.none )
-
-        EditAmount amount ->
-            let
-                f =
-                    model.formInput
-
-                formInput =
-                    { f | amount = amount }
-            in
-            ( { model | formInput = formInput }, Cmd.none )
-
-        SubmitForm ->
-            let
-                formValidation : FormValidation
-                formValidation =
-                    case validateForm model.formInput of
-                        Ok transaction ->
-                            Valid transaction
-
-                        Err error ->
-                            Error error
-
-                cmd : Cmd Msg
-                cmd =
-                    case formValidation of
-                        Valid transaction ->
-                            transactionToJson transaction |> saveTransaction
-
-                        _ ->
-                            Cmd.none
-
-                page : Page
                 page =
-                    case formValidation of
-                        Valid _ ->
-                            List
+                    if close then
+                        List
 
-                        _ ->
-                            Edit
+                    else
+                        model.currentPage
             in
-            ( { model | formValidation = formValidation, currentPage = page }, cmd )
+            ( { model
+                | editTransactionState = editTransactionState
+                , currentPage = page
+              }
+            , cmd |> Cmd.map EditTransactionMsg
+            )
 
         EditSettingsMsg settingsMsg ->
             let
@@ -381,61 +240,6 @@ buildListItems txns =
     listItems
 
 
-validateForm : FormInput -> Result FormResult Transaction
-validateForm input =
-    let
-        results : FormResult
-        results =
-            { date = Date.fromIsoString input.date
-            , description = isFieldNotBlank "Description" input.description
-            , destination = isFieldNotBlank "Destination" input.destination
-            , source = isFieldNotBlank "Source" input.source
-            , amount = isAmountValid input.amount
-            , currency = isFieldNotBlank "Currency" input.currency
-            }
-
-        destination : Result String Entry
-        destination =
-            Result.map3
-                Entry
-                results.destination
-                results.currency
-                results.amount
-
-        source : Result String Entry
-        source =
-            Result.map3
-                Entry
-                results.source
-                results.currency
-                (results.amount |> Result.map (\amnt -> amnt * -1))
-
-        transaction : Result String Transaction
-        transaction =
-            Result.map4
-                (Transaction input.id input.version)
-                results.date
-                results.description
-                destination
-                source
-    in
-    transaction |> Result.mapError (\_ -> results)
-
-
-isAmountValid : String -> Result String Int
-isAmountValid a =
-    case String.toFloat a of
-        Nothing ->
-            Err ("Invalid amount: " ++ a)
-
-        Just float ->
-            if float == 0.0 then
-                Err "Amount cannot be zero"
-
-            else
-                Ok (float * 100 |> round)
-
-
 
 ---- VIEW ----
 
@@ -465,7 +269,7 @@ renderPage model =
                 viewListItems model
 
         Edit ->
-            viewForm model
+            EditTransaction.viewForm model.editTransactionState |> Html.map EditTransactionMsg
 
         EditSettings ->
             EditSettings.viewForm model.editSettingsState |> Html.map EditSettingsMsg
@@ -588,127 +392,7 @@ viewAmount entry =
     div [ class "right floated content" ] [ text (entry.currency ++ " " ++ amount) ]
 
 
-viewForm : Model -> Html Msg
-viewForm model =
-    let
-        f : FormInput
-        f =
-            model.formInput
-
-        isFormError =
-            case model.formValidation of
-                Error _ ->
-                    True
-
-                _ ->
-                    False
-
-        isFormSuccess =
-            case model.formValidation of
-                Valid _ ->
-                    True
-
-                _ ->
-                    False
-
-        formResult : Maybe FormResult
-        formResult =
-            case model.formValidation of
-                Error err ->
-                    Just err
-
-                _ ->
-                    Nothing
-
-        isDateError =
-            formResult
-                |> Maybe.map (\results -> isError results.date)
-                |> withDefault False
-
-        isDescriptionError =
-            formResult
-                |> Maybe.map (\results -> isError results.description)
-                |> withDefault False
-
-        isDestinationError =
-            formResult
-                |> Maybe.map (\results -> isError results.destination)
-                |> withDefault False
-
-        isSourceError =
-            formResult
-                |> Maybe.map (\results -> isError results.source)
-                |> withDefault False
-
-        isAmountError =
-            formResult
-                |> Maybe.map (\results -> isError results.amount)
-                |> withDefault False
-    in
-    div []
-        [ form
-            [ class "ui large form"
-            , classList
-                [ ( "error", isFormError )
-                , ( "success", isFormSuccess )
-                ]
-            , onSubmit SubmitForm
-            ]
-            [ div [ class "field", classList [ ( "error", isDateError ) ] ]
-                [ label [] [ text "Date" ]
-                , input
-                    [ name "date", cyAttr "date", type_ "date", value f.date, onInput EditDate ]
-                    []
-                ]
-            , div [ class "field", classList [ ( "error", isDescriptionError ) ] ]
-                [ label [] [ text "Description" ]
-                , input [ name "description", cyAttr "description", placeholder "Supermarket", value f.description, onInput EditDescription ] []
-                ]
-            , div [ class "field", classList [ ( "error", isDestinationError ) ] ]
-                [ label [] [ text "Expense" ]
-                , select [ class "ui fluid dropdown", cyAttr "destination", name "destination", onInput EditDestination ] (destinationOptions model)
-                ]
-            , div [ class "field", classList [ ( "error", isSourceError ) ] ]
-                [ label [] [ text "Source" ]
-                , select [ class "ui fluid dropdown", cyAttr "source", name "source", onInput EditSource ] (sourceOptions model)
-                ]
-            , div [ class "field", classList [ ( "error", isAmountError ) ] ]
-                [ label [] [ text "Amount" ]
-                , input
-                    [ name "amount"
-                    , cyAttr "amount"
-                    , type_ "number"
-                    , step "0.01"
-                    , placeholder "Amount"
-                    , attribute "inputmode" "decimal"
-                    , lang "en-US"
-                    , placeholder "10.99"
-                    , value f.amount
-                    , onInput EditAmount
-                    ]
-                    []
-                ]
-            , viewFormValidationResult model
-            , button [ class "positive ui button right floated", cyAttr "submit" ]
-                [ text "Submit" ]
-            , div [ class "ui button", onClick (SetPage List) ]
-                [ text "Cancel" ]
-            , maybeViewDeleteButton f
-            ]
-        ]
-
-
-maybeViewDeleteButton : FormInput -> Html Msg
-maybeViewDeleteButton f =
-    if f.id /= "" then
-        div [ class "negative ui button", cyAttr "delete", onClick (DeleteTransaction f.id f.version) ]
-            [ text "Delete" ]
-
-    else
-        span [] []
-
-
-defaultFormInput : Model -> FormInput
+defaultFormInput : Model -> EditTransaction.Input
 defaultFormInput model =
     { id = ""
     , version = ""
@@ -723,18 +407,22 @@ defaultFormInput model =
     }
 
 
-transactionFormInput : Transaction -> FormInput
-transactionFormInput txn =
-    { id = txn.id
-    , version = txn.version
-    , date = Date.toIsoString txn.date
-    , description = txn.description
-    , destination = txn.destination.account
-    , source = txn.source.account
-    , amount = toFloat txn.destination.amount / 100.0 |> String.fromFloat
-    , currency = txn.destination.currency
-    , extraDestinations = [ txn.destination.account ]
-    , extraSources = [ txn.source.account ]
+transactionFormInput : Transaction -> Settings -> EditTransaction.State
+transactionFormInput txn settings =
+    { input =
+        { id = txn.id
+        , version = txn.version
+        , date = Date.toIsoString txn.date
+        , description = txn.description
+        , destination = txn.destination.account
+        , source = txn.source.account
+        , amount = toFloat txn.destination.amount / 100.0 |> String.fromFloat
+        , currency = txn.destination.currency
+        , extraDestinations = [ txn.destination.account ]
+        , extraSources = [ txn.source.account ]
+        }
+    , results = Nothing
+    , settings = settings
     }
 
 
@@ -749,192 +437,6 @@ getSettingsFormInput settings =
     , results = Nothing
     , showCancelButton = True
     }
-
-
-destinationOptions : Model -> List (Html Msg)
-destinationOptions model =
-    let
-        options : List String
-        options =
-            (model.settings.destinationAccounts ++ model.formInput.extraDestinations)
-                |> List.Extra.unique
-
-        selectedOpt : String
-        selectedOpt =
-            model.formInput.destination
-    in
-    options
-        |> List.map (\opt -> option [ value opt, selected (selectedOpt == opt) ] [ text opt ])
-
-
-sourceOptions : Model -> List (Html Msg)
-sourceOptions model =
-    let
-        options : List String
-        options =
-            (model.settings.sourceAccounts ++ model.formInput.extraSources)
-                |> List.Extra.unique
-
-        selectedOpt : String
-        selectedOpt =
-            model.formInput.source
-    in
-    options
-        |> List.map (\opt -> option [ value opt, selected (selectedOpt == opt) ] [ text opt ])
-
-
-viewFormValidationResult : Model -> Html Msg
-viewFormValidationResult model =
-    case model.formValidation of
-        Error _ ->
-            viewFormErrors model
-
-        Valid t ->
-            viewFormSuccess t
-
-        None ->
-            div [] []
-
-
-viewFormErrors : Model -> Html Msg
-viewFormErrors model =
-    let
-        dropSuccess : Result String a -> Result String String
-        dropSuccess res =
-            Result.map (\_ -> "") res
-
-        formResult : Maybe FormResult
-        formResult =
-            case model.formValidation of
-                Error err ->
-                    Just err
-
-                _ ->
-                    Nothing
-
-        formErrors : List String
-        formErrors =
-            case formResult of
-                Nothing ->
-                    []
-
-                Just results ->
-                    [ results.date |> dropSuccess
-                    , results.description
-                    , results.destination
-                    , results.source
-                    , results.amount |> dropSuccess
-                    , results.currency
-                    ]
-                        |> List.filterMap keepError
-    in
-    div [ class "ui error message" ]
-        (div
-            [ class "header" ]
-            [ text "Invalid input" ]
-            :: (formErrors |> List.map (\e -> p [] [ text e ]))
-        )
-
-
-viewFormSuccess : Transaction -> Html Msg
-viewFormSuccess txn =
-    div [ class "ui success message" ]
-        [ div [ class "header" ] [ text "Data to be saved" ]
-        , pre [] [ text (viewFormSucessText txn) ]
-        ]
-
-
-viewFormSucessText : Transaction -> String
-viewFormSucessText txn =
-    let
-        entries =
-            buildTextEntries [ txn.destination, txn.source ]
-
-        rows : List String
-        rows =
-            (Date.toIsoString txn.date ++ "  " ++ txn.description)
-                :: entries
-    in
-    String.join "\n" rows
-
-
-buildTextEntries : List Entry -> List String
-buildTextEntries entries =
-    let
-        findMax : List Int -> Int
-        findMax nums =
-            List.foldl max 0 nums
-
-        parts =
-            entries |> List.map (\e -> ( e.account, e.currency ++ " " ++ format usLocale (toFloat e.amount / 100.0) ))
-
-        maxAccLength =
-            parts |> List.map Tuple.first |> List.map String.length |> findMax
-
-        maxAmntLength =
-            parts |> List.map Tuple.second |> List.map String.length |> findMax
-
-        padded =
-            parts |> List.map (\( acc, amm ) -> [ String.padRight maxAccLength ' ' acc, String.padLeft maxAmntLength ' ' amm ])
-    in
-    List.map (String.join " ") padded
-
-
-transactionToJson : Transaction -> JsonTransaction
-transactionToJson txn =
-    JsonTransaction txn.id txn.version (Date.toIsoString txn.date) txn.description txn.destination txn.source
-
-
-
----- DECODERS ----
-
-
-entryDecoder : Json.Decode.Decoder Entry
-entryDecoder =
-    Json.Decode.succeed Entry
-        |> required "account" Json.Decode.string
-        |> required "currency" Json.Decode.string
-        |> required "amount" Json.Decode.int
-
-
-transactionDecoder : Json.Decode.Decoder Transaction
-transactionDecoder =
-    Json.Decode.succeed Transaction
-        |> required "id" Json.Decode.string
-        |> required "version" Json.Decode.string
-        |> required "date" dateDecoder
-        |> required "description" Json.Decode.string
-        |> required "destination" entryDecoder
-        |> required "source" entryDecoder
-
-
-dateDecoder : Json.Decode.Decoder Date
-dateDecoder =
-    Json.Decode.string
-        |> Json.Decode.andThen
-            (\str ->
-                case Date.fromIsoString str of
-                    Ok d ->
-                        Json.Decode.succeed d
-
-                    _ ->
-                        Json.Decode.fail ("Invalid date " ++ str)
-            )
-
-
-decodeTransactions : Json.Decode.Value -> Result Json.Decode.Error (List Transaction)
-decodeTransactions jsonData =
-    Json.Decode.decodeValue (Json.Decode.list transactionDecoder) jsonData
-
-
-
----- PORTS ELM => JS ----
-
-
-port saveTransaction : JsonTransaction -> Cmd msg
-
-
-port deleteTransaction : ( String, String ) -> Cmd msg
 
 
 
