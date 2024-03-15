@@ -1,5 +1,6 @@
 module MainTests exposing (..)
 
+import Dict exposing (Dict)
 import EditTransaction
 import Expect
 import Helpers exposing (..)
@@ -85,6 +86,9 @@ editViewResetsForm =
                 , extraSources = []
                 }
             , results = Nothing
+            , descriptions = Dict.empty
+            , accounts = []
+            , editMode = EditTransaction.Simple
             , settings = Settings.defaultSettings
             }
 

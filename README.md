@@ -7,6 +7,7 @@ This is an ongoing series of learning Elm by example.
 5. In part five we persist transactions ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-5/), [example](https://pablolb.github.io/elm-expenses/part-5/), [example with debugger](https://pablolb.github.io/elm-expenses/part-5-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-5)).
 6. In part six we add cypress and fix a bug ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-6/), [example](https://pablolb.github.io/elm-expenses/part-6/), [example with debugger](https://pablolb.github.io/elm-expenses/part-6-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-6)).
 7. In part seven we create the edit settings and add Cucumber tests ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-7/), [example](https://pablolb.github.io/elm-expenses/part-7/), [example with debugger](https://pablolb.github.io/elm-expenses/part-7-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-7)).
+8. In part eight we create the advanced edit mode ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-8/), [example](https://pablolb.github.io/elm-expenses/part-8/), [example with debugger](https://pablolb.github.io/elm-expenses/part-8-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-8)).
 
 ## Running locally
 

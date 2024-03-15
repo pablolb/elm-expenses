@@ -1,12 +1,13 @@
-port module EditTransaction exposing (Input, Msg(..), Results, State, emptyState, update, validateForm, viewForm)
+port module EditTransaction exposing (EditMode(..), FrequentDescription, FrequentDescriptions, Input, Msg(..), Results, State, emptyState, update, validateForm, viewForm)
 
 import Date exposing (Date)
+import Dict exposing (Dict)
 import Html exposing (Html, button, div, form, input, label, option, p, select, span, text)
-import Html.Attributes exposing (attribute, class, classList, lang, name, placeholder, selected, step, type_, value)
+import Html.Attributes exposing (attribute, checked, class, classList, for, id, lang, list, name, placeholder, selected, step, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import List.Extra
 import Maybe exposing (withDefault)
-import Misc exposing (cyAttr, isError, isFieldNotBlank, keepError)
+import Misc exposing (cyAttr, isError, isFieldNotBlank, keepError, viewDataList)
 import Settings exposing (Settings, defaultSettings)
 import Transactions exposing (Entry, JsonTransaction, Transaction, transactionToJson)
 
@@ -14,6 +15,9 @@ import Transactions exposing (Entry, JsonTransaction, Transaction, transactionTo
 type alias State =
     { input : Input
     , results : Maybe Results
+    , editMode : EditMode
+    , accounts : List String
+    , descriptions : FrequentDescriptions
     , settings : Settings
     }
 
@@ -42,6 +46,18 @@ type alias Results =
     }
 
 
+type alias FrequentDescription =
+    { description : String
+    , destination : String
+    , source : String
+    , count : Int
+    }
+
+
+type alias FrequentDescriptions =
+    Dict String FrequentDescription
+
+
 emptyState : State
 emptyState =
     { input =
@@ -57,8 +73,16 @@ emptyState =
         , extraSources = []
         }
     , results = Nothing
+    , editMode = Simple
+    , accounts = []
+    , descriptions = Dict.empty
     , settings = defaultSettings
     }
+
+
+type EditMode
+    = Simple
+    | Advanced
 
 
 type Msg
@@ -67,8 +91,10 @@ type Msg
     | EditDestination String
     | EditSource String
     | EditAmount String
+    | EditCurrency String
     | SubmitForm
     | DeleteTransaction String String
+    | ToggleEditMode
     | Close
 
 
@@ -87,11 +113,40 @@ update msg model =
 
         EditDescription description ->
             let
+                maybeDstSrc =
+                    Dict.get description model.descriptions
+
+                destination =
+                    maybeDstSrc |> Maybe.map .destination |> withDefault f.destination
+
+                source =
+                    maybeDstSrc |> Maybe.map .source |> withDefault f.source
+
+                extraDestinations =
+                    if destination /= f.destination then
+                        destination :: f.extraDestinations
+
+                    else
+                        f.extraDestinations
+
+                extraSources =
+                    if source /= f.source then
+                        source :: f.extraSources
+
+                    else
+                        f.extraSources
+
                 f =
                     model.input
 
                 input =
-                    { f | description = description }
+                    { f
+                        | description = description
+                        , destination = destination
+                        , source = source
+                        , extraDestinations = extraDestinations
+                        , extraSources = extraSources
+                    }
             in
             ( { model | input = input }, Cmd.none, False )
 
@@ -125,6 +180,16 @@ update msg model =
             in
             ( { model | input = input }, Cmd.none, False )
 
+        EditCurrency currency ->
+            let
+                f =
+                    model.input
+
+                input =
+                    { f | currency = currency }
+            in
+            ( { model | input = input }, Cmd.none, False )
+
         SubmitForm ->
             let
                 isValid : Result Results Transaction
@@ -143,6 +208,17 @@ update msg model =
 
         DeleteTransaction id version ->
             ( model, deleteTransaction ( id, version ), True )
+
+        ToggleEditMode ->
+            let
+                editMode =
+                    if model.editMode == Simple then
+                        Advanced
+
+                    else
+                        Simple
+            in
+            ( { model | editMode = editMode }, Cmd.none, False )
 
         Close ->
             ( model, Cmd.none, True )
@@ -242,6 +318,11 @@ viewForm model =
             model.results
                 |> Maybe.map (\results -> isError results.amount)
                 |> withDefault False
+
+        isCurrencyError =
+            model.results
+                |> Maybe.map (\results -> isError results.currency)
+                |> withDefault False
     in
     div []
         [ form
@@ -259,15 +340,7 @@ viewForm model =
                 ]
             , div [ class "field", classList [ ( "error", isDescriptionError ) ] ]
                 [ label [] [ text "Description" ]
-                , input [ name "description", cyAttr "description", placeholder "Supermarket", value f.description, onInput EditDescription ] []
-                ]
-            , div [ class "field", classList [ ( "error", isDestinationError ) ] ]
-                [ label [] [ text "Expense" ]
-                , select [ class "ui fluid dropdown", cyAttr "destination", name "destination", onInput EditDestination ] (destinationOptions model)
-                ]
-            , div [ class "field", classList [ ( "error", isSourceError ) ] ]
-                [ label [] [ text "Source" ]
-                , select [ class "ui fluid dropdown", cyAttr "source", name "source", onInput EditSource ] (sourceOptions model)
+                , input [ name "description", cyAttr "description", list "descriptions", placeholder "Supermarket", value f.description, onInput EditDescription ] []
                 ]
             , div [ class "field", classList [ ( "error", isAmountError ) ] ]
                 [ label [] [ text "Amount" ]
@@ -285,6 +358,15 @@ viewForm model =
                     ]
                     []
                 ]
+            , viewCurrencyInput model isCurrencyError
+            , div [ class "field", classList [ ( "error", isDestinationError ) ] ]
+                [ label [] [ text "Expense" ]
+                , viewDestinationInput model
+                ]
+            , div [ class "field", classList [ ( "error", isSourceError ) ] ]
+                [ label [] [ text "Source" ]
+                , viewSourceInput model
+                ]
             , viewFormValidation model.results
             , button [ class "positive ui button right floated", cyAttr "submit" ]
                 [ text "Submit" ]
@@ -292,7 +374,43 @@ viewForm model =
                 [ text "Cancel" ]
             , maybeViewDeleteButton f
             ]
+        , viewToggleEditModeButton model.editMode
+        , viewAccountsDataList model
+        , viewDescriptionsDataList model.descriptions
         ]
+
+
+viewDestinationInput : State -> Html Msg
+viewDestinationInput model =
+    case model.editMode of
+        Simple ->
+            select [ class "ui fluid dropdown", cyAttr "destination", name "destination", onInput EditDestination ] (destinationOptions model)
+
+        Advanced ->
+            input [ name "destination", cyAttr "destination", placeholder "Expenses:Groceries", list "accounts", value model.input.destination, onInput EditDestination ] []
+
+
+viewSourceInput : State -> Html Msg
+viewSourceInput model =
+    case model.editMode of
+        Simple ->
+            select [ class "ui fluid dropdown", cyAttr "source", name "source", onInput EditSource ] (sourceOptions model)
+
+        Advanced ->
+            input [ name "source", cyAttr "source", placeholder "Assets:Cash", list "accounts", value model.input.source, onInput EditSource ] []
+
+
+viewCurrencyInput : State -> Bool -> Html Msg
+viewCurrencyInput model isCurrencyError =
+    case model.editMode of
+        Simple ->
+            div [] []
+
+        Advanced ->
+            div [ class "field", classList [ ( "error", isCurrencyError ) ] ]
+                [ label [] [ text "Currency" ]
+                , input [ name "currency", cyAttr "currency", placeholder "USD", value model.input.currency, onInput EditCurrency ] []
+                ]
 
 
 maybeViewDeleteButton : Input -> Html Msg
@@ -303,6 +421,20 @@ maybeViewDeleteButton f =
 
     else
         span [] []
+
+
+viewToggleEditModeButton : EditMode -> Html Msg
+viewToggleEditModeButton editMode =
+    let
+        isChecked =
+            editMode == Advanced
+    in
+    div [ class "fab" ]
+        [ div [ class "ui toggle checkbox" ]
+            [ input [ id "toggle-advanced", type_ "checkbox", cyAttr "toggle-advanced", checked isChecked, onClick ToggleEditMode ] []
+            , label [ for "toggle-advanced" ] [ text "Advanced Edit" ]
+            ]
+        ]
 
 
 destinationOptions : State -> List (Html Msg)
@@ -371,6 +503,22 @@ viewFormErrors results =
             [ text "Invalid input" ]
             :: (formErrors |> List.map (\e -> p [] [ text e ]))
         )
+
+
+viewAccountsDataList : State -> Html Msg
+viewAccountsDataList model =
+    let
+        accounts =
+            model.settings.destinationAccounts
+                ++ model.settings.sourceAccounts
+                ++ List.sort model.accounts
+    in
+    viewDataList "accounts" accounts
+
+
+viewDescriptionsDataList : FrequentDescriptions -> Html Msg
+viewDescriptionsDataList descriptions =
+    viewDataList "descriptions" (descriptions |> Dict.values |> List.sortBy .count |> List.reverse |> List.map .description)
 
 
 

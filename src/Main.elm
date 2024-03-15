@@ -2,16 +2,16 @@ port module Main exposing (ListItem(..), Model, Msg(..), Page(..), defaultFormIn
 
 import Browser
 import Date exposing (Date)
-import EditTransaction
+import Dict exposing (Dict)
+import EditTransaction exposing (FrequentDescription, FrequentDescriptions)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, button, div, form, h1, h2, i, input, label, node, option, p, pre, select, span, text, textarea)
-import Html.Attributes exposing (attribute, class, classList, id, lang, list, name, placeholder, selected, step, type_, value)
-import Html.Events exposing (onClick, onInput, onSubmit)
+import Html exposing (Html, button, div, h2, i, text)
+import Html.Attributes exposing (attribute, class, name)
+import Html.Events exposing (onClick)
 import Json.Decode
 import List.Extra
 import Maybe exposing (withDefault)
-import Misc exposing (isError, isFieldNotBlank, keepError)
 import Settings as EditSettings exposing (Msg(..), Settings, decodeSettings)
 import Task
 import Time exposing (Month(..))
@@ -24,6 +24,8 @@ import Transactions exposing (Entry, Transaction, decodeTransactions)
 
 type alias Model =
     { transactions : List Transaction
+    , accounts : Accounts
+    , frequentDescriptions : EditTransaction.FrequentDescriptions
     , listItems : List ListItem
     , editTransactionState : EditTransaction.State
     , settings : Settings
@@ -32,6 +34,16 @@ type alias Model =
     , currentDate : Date
     , currentPage : Page
     }
+
+
+type alias Account =
+    { name : String
+    , shortName : String
+    }
+
+
+type alias Accounts =
+    Dict String Account
 
 
 type ListItem
@@ -59,6 +71,8 @@ type SettingsStatus
 initialModel : Model
 initialModel =
     { transactions = []
+    , accounts = Dict.empty
+    , frequentDescriptions = Dict.empty
     , listItems = []
     , editTransactionState = EditTransaction.emptyState
     , settings = EditSettings.defaultSettings
@@ -110,6 +124,9 @@ update msg model =
                 , editTransactionState =
                     { input = defaultFormInput model
                     , results = Nothing
+                    , editMode = EditTransaction.Simple
+                    , accounts = Dict.keys model.accounts
+                    , descriptions = model.frequentDescriptions
                     , settings = model.settings
                     }
               }
@@ -130,7 +147,7 @@ update msg model =
         EditTransaction transaction ->
             let
                 editTransactionState =
-                    transactionFormInput transaction model.settings
+                    transactionFormInput transaction model
             in
             ( { model | editTransactionState = editTransactionState, currentPage = Edit }, Cmd.none )
 
@@ -189,8 +206,21 @@ update msg model =
             let
                 listItems =
                     buildListItems transactions
+
+                accounts =
+                    buildAccounts transactions
+
+                frequentDescriptions =
+                    buildFrequentDescriptions transactions
             in
-            ( { model | transactions = transactions, listItems = listItems }, Cmd.none )
+            ( { model
+                | accounts = accounts
+                , frequentDescriptions = frequentDescriptions
+                , transactions = transactions
+                , listItems = listItems
+              }
+            , Cmd.none
+            )
 
         ImportSample ->
             ( { model | currentPage = List }, EditSettings.importSampleData () )
@@ -238,6 +268,48 @@ buildListItems txns =
                 |> List.concat
     in
     listItems
+
+
+buildAccounts : List Transaction -> Accounts
+buildAccounts txns =
+    let
+        accounts : Dict String Account
+        accounts =
+            txns
+                |> List.map (\t -> [ t.source.account, t.destination.account ])
+                |> List.concat
+                |> List.Extra.unique
+                |> List.map (\account -> ( account, Account account (accountShortName account) ))
+                |> Dict.fromList
+    in
+    accounts
+
+
+buildFrequentDescriptions : List Transaction -> FrequentDescriptions
+buildFrequentDescriptions txns =
+    let
+        acc : ( String, { dst : String, src : String, cnt : Int } ) -> Dict String { dst : String, src : String, cnt : Int } -> Dict String { dst : String, src : String, cnt : Int }
+        acc ( desc, rec ) dict =
+            Dict.update desc
+                (\exists ->
+                    case exists of
+                        Nothing ->
+                            Just rec
+
+                        Just current ->
+                            Just { current | cnt = current.cnt + 1 }
+                )
+                dict
+    in
+    txns
+        |> List.map (\t -> ( t.description, { dst = t.destination.account, src = t.source.account, cnt = 1 } ))
+        |> List.foldl acc Dict.empty
+        |> Dict.toList
+        |> List.sortBy (\( _, rec ) -> rec.cnt)
+        |> List.reverse
+        |> List.take 50
+        |> List.map (\( desc, rec ) -> ( desc, FrequentDescription desc rec.dst rec.src rec.cnt ))
+        |> Dict.fromList
 
 
 
@@ -312,7 +384,7 @@ viewListItems model =
             (\item ->
                 case item of
                     T transaction ->
-                        viewTransaction transaction
+                        viewTransaction transaction model.accounts
 
                     D date ->
                         viewDate date
@@ -341,22 +413,22 @@ viewDate date =
         ]
 
 
-viewTransaction : Transaction -> Html Msg
-viewTransaction txn =
+viewTransaction : Transaction -> Accounts -> Html Msg
+viewTransaction txn accounts =
     div [ class "item", onClick (EditTransaction txn) ]
-        [ viewDescription txn
+        [ viewDescription txn accounts
         , viewAmount txn.destination
         ]
 
 
-viewDescription : Transaction -> Html Msg
-viewDescription txn =
+viewDescription : Transaction -> Accounts -> Html Msg
+viewDescription txn accounts =
     let
         source =
-            accountShortName txn.source.account
+            Dict.get txn.source.account accounts |> Maybe.map .shortName |> withDefault txn.source.account
 
         destination =
-            accountShortName txn.destination.account
+            Dict.get txn.destination.account accounts |> Maybe.map .shortName |> withDefault txn.destination.account
     in
     div [ class "left floated content" ]
         [ div [ class "header txn-description" ] [ text txn.description ]
@@ -407,8 +479,8 @@ defaultFormInput model =
     }
 
 
-transactionFormInput : Transaction -> Settings -> EditTransaction.State
-transactionFormInput txn settings =
+transactionFormInput : Transaction -> Model -> EditTransaction.State
+transactionFormInput txn model =
     { input =
         { id = txn.id
         , version = txn.version
@@ -422,7 +494,10 @@ transactionFormInput txn settings =
         , extraSources = [ txn.source.account ]
         }
     , results = Nothing
-    , settings = settings
+    , editMode = EditTransaction.Simple
+    , accounts = Dict.keys model.accounts
+    , descriptions = model.frequentDescriptions
+    , settings = model.settings
     }
 
 

@@ -1,7 +1,7 @@
 module Misc exposing (..)
 
-import Html
-import Html.Attributes exposing (attribute)
+import Html exposing (Html, node, option)
+import Html.Attributes exposing (attribute, id, value)
 
 
 isFieldNotBlank : String -> String -> Result String String
@@ -70,3 +70,8 @@ keepError res =
 cyAttr : String -> Html.Attribute msg
 cyAttr name =
     attribute "data-cy" name
+
+
+viewDataList : String -> List String -> Html msg
+viewDataList nodeId list =
+    node "datalist" [ id nodeId ] (List.map (\a -> option [ value a ] []) list)
