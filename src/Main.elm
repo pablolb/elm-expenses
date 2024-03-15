@@ -177,7 +177,7 @@ update msg model =
 
                 currentPage =
                     if cancel then
-                        if settingsMsg == DeleteAllData then
+                        if settingsMsg == DeleteAllConfirmed then
                             Welcome
 
                         else
@@ -187,7 +187,7 @@ update msg model =
                         model.currentPage
 
                 ( settings, settingsStatus, showCancelButton ) =
-                    if settingsMsg == DeleteAllData then
+                    if settingsMsg == DeleteAllConfirmed then
                         ( EditSettings.defaultSettings, NoSettings, False )
 
                     else
@@ -547,6 +547,10 @@ subscriptions _ =
         [ gotTransactions (decodeTransactions >> GotTransactions)
         , gotSettings (decodeSettings >> GotSettings)
         , gotFirstRun (\_ -> GotFirstRun)
+        , Sub.map EditTransactionMsg (EditTransaction.cancelDelete (\_ -> EditTransaction.DeleteCancelled))
+        , Sub.map EditTransactionMsg (EditTransaction.confirmDelete (\_ -> EditTransaction.DeleteConfirmed))
+        , Sub.map EditSettingsMsg (EditSettings.cancelDeleteAll (\_ -> EditSettings.DeleteAllCancelled))
+        , Sub.map EditSettingsMsg (EditSettings.confirmDeleteAll (\_ -> EditSettings.DeleteAllConfirmed))
         ]
 
 

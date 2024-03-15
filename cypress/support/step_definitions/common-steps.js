@@ -44,6 +44,8 @@ When('I click the "Add Transaction" button', () => cy.get('[data-cy="add-transac
 When('I click the "Import Sample" button', () => cy.get('[data-cy="import-sample"]').click())
 When('I click the "Delete All Data" button', () => cy.get('[data-cy="delete-all-data"]').click())
 When('I click the "Delete" button', () => cy.get('[data-cy="delete"]').click())
+When('I answer "yes" in the confirmation message', () => cy.get('[data-cy="confirm-modal"]').click())
+When('I answer "no" in the confirmation message', () => cy.get('[data-cy="cancel-modal"]').click())
 
 Then('the date is {string}', text => cy.get('[data-cy="date"]').should('have.value', text))
 Then('the description is {string}', text => cy.get('[data-cy="description"]').should('have.value', text))

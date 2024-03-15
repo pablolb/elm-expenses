@@ -1,13 +1,14 @@
-port module EditTransaction exposing (EditMode(..), FrequentDescription, FrequentDescriptions, Input, Msg(..), Results, State, emptyState, update, validateForm, viewForm)
+port module EditTransaction exposing (EditMode(..), FrequentDescription, FrequentDescriptions, Input, Msg(..), Results, State, cancelDelete, confirmDelete, emptyState, update, validateForm, viewForm)
 
 import Date exposing (Date)
 import Dict exposing (Dict)
-import Html exposing (Html, button, div, form, input, label, option, p, select, span, text)
+import Html exposing (Html, button, div, form, i, input, label, option, p, select, span, text)
 import Html.Attributes exposing (attribute, checked, class, classList, for, id, lang, list, name, placeholder, selected, step, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
+import Json.Decode
 import List.Extra
 import Maybe exposing (withDefault)
-import Misc exposing (cyAttr, isError, isFieldNotBlank, keepError, viewDataList)
+import Misc exposing (cyAttr, isError, isFieldNotBlank, keepError, viewConfirmModal, viewDataList)
 import Settings exposing (Settings, defaultSettings)
 import Transactions exposing (Entry, JsonTransaction, Transaction, transactionToJson)
 
@@ -93,7 +94,9 @@ type Msg
     | EditAmount String
     | EditCurrency String
     | SubmitForm
-    | DeleteTransaction String String
+    | DeleteRequested
+    | DeleteCancelled
+    | DeleteConfirmed
     | ToggleEditMode
     | Close
 
@@ -206,9 +209,6 @@ update msg model =
             in
             ( { model | results = results }, cmd, close )
 
-        DeleteTransaction id version ->
-            ( model, deleteTransaction ( id, version ), True )
-
         ToggleEditMode ->
             let
                 editMode =
@@ -219,6 +219,15 @@ update msg model =
                         Simple
             in
             ( { model | editMode = editMode }, Cmd.none, False )
+
+        DeleteRequested ->
+            ( model, showDeleteModal (), False )
+
+        DeleteCancelled ->
+            ( model, Cmd.none, False )
+
+        DeleteConfirmed ->
+            ( model, deleteTransaction ( model.input.id, model.input.version ), True )
 
         Close ->
             ( model, Cmd.none, True )
@@ -377,6 +386,7 @@ viewForm model =
         , viewToggleEditModeButton model.editMode
         , viewAccountsDataList model
         , viewDescriptionsDataList model.descriptions
+        , viewConfirmModal
         ]
 
 
@@ -416,7 +426,7 @@ viewCurrencyInput model isCurrencyError =
 maybeViewDeleteButton : Input -> Html Msg
 maybeViewDeleteButton f =
     if f.id /= "" then
-        div [ class "negative ui button", cyAttr "delete", onClick (DeleteTransaction f.id f.version) ]
+        div [ class "negative ui button", cyAttr "delete", onClick DeleteRequested ]
             [ text "Delete" ]
 
     else
@@ -529,3 +539,12 @@ port saveTransaction : JsonTransaction -> Cmd msg
 
 
 port deleteTransaction : ( String, String ) -> Cmd msg
+
+
+port showDeleteModal : () -> Cmd msg
+
+
+port cancelDelete : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port confirmDelete : (Json.Decode.Value -> msg) -> Sub msg

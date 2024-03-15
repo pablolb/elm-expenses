@@ -1,7 +1,7 @@
 module Misc exposing (..)
 
-import Html exposing (Html, node, option)
-import Html.Attributes exposing (attribute, id, value)
+import Html exposing (Html, div, i, node, option, p, text)
+import Html.Attributes exposing (attribute, class, id, value)
 
 
 isFieldNotBlank : String -> String -> Result String String
@@ -75,3 +75,22 @@ cyAttr name =
 viewDataList : String -> List String -> Html msg
 viewDataList nodeId list =
     node "datalist" [ id nodeId ] (List.map (\a -> option [ value a ] []) list)
+
+
+viewConfirmModal : Html msg
+viewConfirmModal =
+    div [ class "ui mini modal" ]
+        [ div [ class "content" ]
+            [ p [] [ text "Are you sure?" ]
+            ]
+        , div [ class "actions" ]
+            [ div [ class "ui red cancel inverted button", cyAttr "cancel-modal" ]
+                [ i [ class "remove icon" ] []
+                , text "No"
+                ]
+            , div [ class "ui green ok inverted button", cyAttr "confirm-modal" ]
+                [ i [ class "checkmark icon" ] []
+                , text "Yes"
+                ]
+            ]
+        ]

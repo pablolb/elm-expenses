@@ -45,7 +45,13 @@ Feature: Users should be able to edit settings
 
     Scenario: I can delete all data
         When I click the "Delete All Data" button
+        And I answer "yes" in the confirmation message
         Then I see "Welcome to Elm Expenses!"
+
+    Scenario: I can cancel when deleting all data
+        When I click the "Delete All Data" button
+        And I answer "no" in the confirmation message
+        Then I see the "Delete All Data" button
 
     Scenario: I cannot store empty settings
         When I set the default currency to an empty string

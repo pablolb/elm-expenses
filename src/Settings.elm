@@ -1,11 +1,11 @@
-port module Settings exposing (Msg(..), Settings, State, decodeSettings, defaultSettings, emptyState, importSampleData, update, viewForm)
+port module Settings exposing (Msg(..), Settings, State, cancelDeleteAll, confirmDeleteAll, decodeSettings, defaultSettings, emptyState, importSampleData, update, viewForm)
 
 import Html exposing (Html, div, form, input, label, p, text, textarea)
 import Html.Attributes exposing (class, classList, name, placeholder, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Json.Decode
 import Json.Decode.Pipeline exposing (required)
-import Misc exposing (cyAttr, isFieldNotBlank, keepError)
+import Misc exposing (cyAttr, isFieldNotBlank, keepError, viewConfirmModal)
 
 
 type alias Settings =
@@ -49,7 +49,9 @@ type Msg
     | Cancel
     | SubmitForm
     | ImportSample
-    | DeleteAllData
+    | DeleteAllRequested
+    | DeleteAllCancelled
+    | DeleteAllConfirmed
 
 
 emptyState : State
@@ -128,7 +130,13 @@ update msg model =
         ImportSample ->
             ( model, importSampleData (), True )
 
-        DeleteAllData ->
+        DeleteAllRequested ->
+            ( model, showDeleteAllModal (), False )
+
+        DeleteAllCancelled ->
+            ( model, Cmd.none, False )
+
+        DeleteAllConfirmed ->
             ( model, deleteAllData (), True )
 
 
@@ -142,7 +150,7 @@ viewForm model =
             if model.showCancelButton then
                 [ div [ class "ui button", cyAttr "cancel", onClick Cancel ] [ text "Cancel" ]
                 , div [ class "ui blue button", cyAttr "import-sample", onClick ImportSample ] [ text "Import Sample" ]
-                , div [ class "ui negative button", cyAttr "delete-all-data", onClick DeleteAllData ] [ text "Delete All Data" ]
+                , div [ class "ui negative button", cyAttr "delete-all-data", onClick DeleteAllRequested ] [ text "Delete All Data" ]
                 ]
 
             else
@@ -189,6 +197,7 @@ viewForm model =
                         [ text "Save" ]
                    ]
             )
+        , viewConfirmModal
         ]
 
 
@@ -245,3 +254,12 @@ port importSampleData : () -> Cmd msg
 
 
 port deleteAllData : () -> Cmd msg
+
+
+port showDeleteAllModal : () -> Cmd msg
+
+
+port cancelDeleteAll : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port confirmDeleteAll : (Json.Decode.Value -> msg) -> Sub msg

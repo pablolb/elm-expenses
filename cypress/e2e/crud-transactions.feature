@@ -50,7 +50,17 @@ Feature: Users should be able to create, update, and delete transactions
             | 2024-03-01 | Pizza        | Expenses:Eat Out & Take Away | Assets:Cash   | 3999   | USD      |
         When I click on "Pizza"
         And I click the "Delete" button
+        And I answer "yes" in the confirmation message
         Then I should not see "Pizza"
+
+    Scenario: Deleting a transaction can be cancelled
+        Given I have saved the following transactions:
+            | date       | description | destination                  | source      | amount | currency |
+            | 2024-03-01 | Pizza       | Expenses:Eat Out & Take Away | Assets:Cash | 3999   | USD      |
+        When I click on "Pizza"
+        And I click the "Delete" button
+        And I answer "no" in the confirmation message
+        Then the description is "Pizza"
 
     Scenario: I can switch to advanced edit mode
         When I go to add a transaction

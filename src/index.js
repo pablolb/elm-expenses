@@ -108,6 +108,40 @@ async function main() {
     return saveTransaction(txn);
   }
 
+  app.ports.showDeleteModal.subscribe(() => {
+    $('.ui.modal')
+      .modal({
+        detachable: false,
+        closable: false,
+        onDeny: () => {
+          app.ports.cancelDelete.send();
+          return true;
+        },
+        onApprove: () => {
+          app.ports.confirmDelete.send();
+          return true;
+        }
+      })
+      .modal('show');
+  });
+
+  app.ports.showDeleteAllModal.subscribe(() => {
+    $('.ui.modal')
+      .modal({
+        detachable: false,
+        closable: false,
+        onDeny: () => {
+          app.ports.cancelDeleteAll.send();
+          return true;
+        },
+        onApprove: () => {
+          app.ports.confirmDeleteAll.send();
+          return true;
+        }
+      })
+      .modal('show');
+  });
+
   if (exposeJsApi) {
     window.ElmExpenses = {
       deleteAllData,
@@ -664,7 +698,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-02-14",
+    "date": "2024-01-14",
     "description": "Medical checkup",
     "destination": {
       "account": "Expenses:Health:MedicalCheckup",
@@ -678,7 +712,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-03-02",
+    "date": "2024-01-20",
     "description": "Home office equipment",
     "destination": {
       "account": "Expenses:Office:HomeOfficeEquipment",
@@ -692,7 +726,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-04-15",
+    "date": "2024-01-20",
     "description": "Car repair",
     "destination": {
       "account": "Expenses:Transportation:CarRepair",
@@ -706,7 +740,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-05-20",
+    "date": "2024-01-20",
     "description": "Grocery shopping",
     "destination": {
       "account": "Expenses:Groceries",
@@ -720,7 +754,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-06-10",
+    "date": "2024-02-01",
     "description": "Home renovation",
     "destination": {
       "account": "Expenses:Home:Renovation",
@@ -734,7 +768,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-07-08",
+    "date": "2024-02-02",
     "description": "Concert tickets",
     "destination": {
       "account": "Expenses:Entertainment:Concerts",
@@ -748,7 +782,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-08-25",
+    "date": "2024-02-03",
     "description": "Electronics upgrade",
     "destination": {
       "account": "Expenses:Electronics",
@@ -762,7 +796,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-09-14",
+    "date": "2024-02-03",
     "description": "Fitness classes",
     "destination": {
       "account": "Expenses:Health:FitnessClasses",
@@ -776,7 +810,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-10-03",
+    "date": "2024-02-13",
     "description": "Clothing and accessories",
     "destination": {
       "account": "Expenses:Clothing",
@@ -790,7 +824,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-11-18",
+    "date": "2024-02-14",
     "description": "Dental cleaning",
     "destination": {
       "account": "Expenses:Health:DentalCleaning",
@@ -804,7 +838,7 @@ const sample = [
     }
   },
   {
-    "date": "2024-12-22",
+    "date": "2024-02-14",
     "description": "Holiday travel expenses",
     "destination": {
       "account": "Expenses:Travel",
