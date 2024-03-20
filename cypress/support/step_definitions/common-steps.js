@@ -9,6 +9,7 @@ Given(/^I have saved the following transactions:$/, table => {
         txn.amount = parseInt(txn.amount)
         cy.addTransaction(txn)
     }
+    cy.sendTransactionsToElm();
 })
 
 When("I click on {string}", text => cy.contains(text).click())

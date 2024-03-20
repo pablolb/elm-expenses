@@ -1,4 +1,18 @@
-port module Settings exposing (Msg(..), Settings, State, cancelDeleteAll, confirmDeleteAll, decodeSettings, defaultSettings, emptyState, importSampleData, update, viewForm)
+port module Settings exposing
+    ( Msg(..)
+    , Settings
+    , State
+    , decodeSettings
+    , defaultSettings
+    , deleteAllCancelled
+    , deleteAllConfirmed
+    , emptyState
+    , importSampleData
+    , settingsSaved
+    , settingsSavedError
+    , update
+    , viewForm
+    )
 
 import Html exposing (Html, div, form, input, label, p, text, textarea)
 import Html.Attributes exposing (class, classList, name, placeholder, value)
@@ -21,9 +35,11 @@ type ValidSettings
 
 
 type alias State =
-    { inputs : Inputs
+    { settings : Settings
+    , inputs : Inputs
     , results : Maybe Results
     , showCancelButton : Bool
+    , saving : Bool
     }
 
 
@@ -48,15 +64,19 @@ type Msg
     | EditSourceAccounts String
     | Cancel
     | SubmitForm
+    | SettingsSaved (Result Json.Decode.Error Settings)
+    | SettingsSavedError (Result Json.Decode.Error String)
     | ImportSample
     | DeleteAllRequested
     | DeleteAllCancelled
     | DeleteAllConfirmed
+    | NoOp
 
 
 emptyState : State
 emptyState =
-    { inputs =
+    { settings = defaultSettings
+    , inputs =
         { version = ""
         , defaultCurrency = ""
         , destinationAccounts = ""
@@ -64,6 +84,7 @@ emptyState =
         }
     , results = Nothing
     , showCancelButton = False
+    , saving = False
     }
 
 
@@ -117,15 +138,24 @@ update msg model =
                 isValid =
                     validateForm model.inputs
 
-                ( results, cmd, close ) =
+                ( results, cmd ) =
                     case isValid of
                         Err e ->
-                            ( Just e, Cmd.none, False )
+                            ( Just e, Cmd.none )
 
                         Ok (ValidSettings settings) ->
-                            ( Nothing, saveSettings settings, True )
+                            ( Nothing, saveSettings settings )
             in
-            ( { model | results = results }, cmd, close )
+            ( { model | results = results }, cmd, False )
+
+        SettingsSavedError _ ->
+            ( { model | saving = False }, Cmd.none, False )
+
+        SettingsSaved (Err _) ->
+            ( { model | saving = False }, Cmd.none, False )
+
+        SettingsSaved (Ok settings) ->
+            ( { model | settings = settings, saving = False }, Cmd.none, True )
 
         ImportSample ->
             ( model, importSampleData (), True )
@@ -138,6 +168,9 @@ update msg model =
 
         DeleteAllConfirmed ->
             ( model, deleteAllData (), True )
+
+        NoOp ->
+            ( model, Cmd.none, False )
 
 
 viewForm : State -> Html Msg
@@ -175,9 +208,16 @@ viewForm model =
 
             else
                 div [] []
+
+        cmd =
+            if model.saving then
+                NoOp
+
+            else
+                SubmitForm
     in
     div []
-        [ form [ class "ui large form", classList [ ( "error", hadErrors ) ], onSubmit SubmitForm ]
+        [ form [ class "ui large form", classList [ ( "error", hadErrors ) ], onSubmit cmd ]
             ([ div [ class "field" ]
                 [ label [] [ text "Default currency" ]
                 , input [ name "defaultCurrency", cyAttr "default-currency", placeholder "USD", value f.defaultCurrency, onInput EditDefaultCurrency ] []
@@ -193,7 +233,7 @@ viewForm model =
              , errorView
              ]
                 ++ otherButtons
-                ++ [ div [ class "ui positive button right floated", cyAttr "save", onClick SubmitForm ]
+                ++ [ div [ class "ui positive button right floated", classList [ ( "disabled", model.saving ) ], cyAttr "save", onClick SubmitForm ]
                         [ text "Save" ]
                    ]
             )
@@ -259,7 +299,13 @@ port deleteAllData : () -> Cmd msg
 port showDeleteAllModal : () -> Cmd msg
 
 
-port cancelDeleteAll : (Json.Decode.Value -> msg) -> Sub msg
+port settingsSaved : (Json.Decode.Value -> msg) -> Sub msg
 
 
-port confirmDeleteAll : (Json.Decode.Value -> msg) -> Sub msg
+port settingsSavedError : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port deleteAllCancelled : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port deleteAllConfirmed : (Json.Decode.Value -> msg) -> Sub msg

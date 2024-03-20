@@ -1,4 +1,22 @@
-port module EditTransaction exposing (EditMode(..), FrequentDescription, FrequentDescriptions, Input, Msg(..), Results, State, cancelDelete, confirmDelete, emptyState, update, validateForm, viewForm)
+port module EditTransaction exposing
+    ( EditMode(..)
+    , FrequentDescription
+    , FrequentDescriptions
+    , Input
+    , Msg(..)
+    , Results
+    , State
+    , deleteCancelled
+    , deleteConfirmed
+    , emptyState
+    , transactionDeleted
+    , transactionDeletedError
+    , transactionSaved
+    , transactionSavedError
+    , update
+    , validateForm
+    , viewForm
+    )
 
 import Date exposing (Date)
 import Dict exposing (Dict)
@@ -20,6 +38,7 @@ type alias State =
     , accounts : List String
     , descriptions : FrequentDescriptions
     , settings : Settings
+    , saving : Bool
     }
 
 
@@ -78,6 +97,7 @@ emptyState =
     , accounts = []
     , descriptions = Dict.empty
     , settings = defaultSettings
+    , saving = False
     }
 
 
@@ -94,11 +114,16 @@ type Msg
     | EditAmount String
     | EditCurrency String
     | SubmitForm
+    | TransactionSaved (Result Json.Decode.Error Transaction)
+    | TransactionSavedError (Result Json.Decode.Error String)
     | DeleteRequested
     | DeleteCancelled
     | DeleteConfirmed
+    | TransactionDeleted
+    | TransactionDeletedError (Result Json.Decode.Error String)
     | ToggleEditMode
     | Close
+    | NoOp
 
 
 update : Msg -> State -> ( State, Cmd Msg, Bool )
@@ -207,7 +232,19 @@ update msg model =
                         Err e ->
                             ( Just e, Cmd.none, False )
             in
-            ( { model | results = results }, cmd, close )
+            ( { model | results = results, saving = True }, cmd, close )
+
+        TransactionSaved (Err _) ->
+            ( { model | saving = False }, Cmd.none, False )
+
+        TransactionSaved (Ok _) ->
+            ( { model | saving = False }, Cmd.none, True )
+
+        TransactionSavedError (Err _) ->
+            ( { model | saving = False }, Cmd.none, False )
+
+        TransactionSavedError (Ok _) ->
+            ( { model | saving = False }, Cmd.none, False )
 
         ToggleEditMode ->
             let
@@ -229,8 +266,17 @@ update msg model =
         DeleteConfirmed ->
             ( model, deleteTransaction ( model.input.id, model.input.version ), True )
 
+        TransactionDeleted ->
+            ( model, Cmd.none, True )
+
+        TransactionDeletedError _ ->
+            ( model, Cmd.none, False )
+
         Close ->
             ( model, Cmd.none, True )
+
+        NoOp ->
+            ( model, Cmd.none, False )
 
 
 validateForm : Input -> Result Results Transaction
@@ -332,6 +378,13 @@ viewForm model =
             model.results
                 |> Maybe.map (\results -> isError results.currency)
                 |> withDefault False
+
+        cmd =
+            if model.saving then
+                NoOp
+
+            else
+                SubmitForm
     in
     div []
         [ form
@@ -339,7 +392,7 @@ viewForm model =
             , classList
                 [ ( "error", isFormError )
                 ]
-            , onSubmit SubmitForm
+            , onSubmit cmd
             ]
             [ div [ class "field", classList [ ( "error", isDateError ) ] ]
                 [ label [] [ text "Date" ]
@@ -377,7 +430,7 @@ viewForm model =
                 , viewSourceInput model
                 ]
             , viewFormValidation model.results
-            , button [ class "positive ui button right floated", cyAttr "submit" ]
+            , button [ class "positive ui button right floated", classList [ ( "disabled", model.saving ) ], cyAttr "submit" ]
                 [ text "Submit" ]
             , div [ class "ui button", onClick Close ]
                 [ text "Cancel" ]
@@ -544,7 +597,23 @@ port deleteTransaction : ( String, String ) -> Cmd msg
 port showDeleteModal : () -> Cmd msg
 
 
-port cancelDelete : (Json.Decode.Value -> msg) -> Sub msg
+
+---- PORTS JS => ELM ----
 
 
-port confirmDelete : (Json.Decode.Value -> msg) -> Sub msg
+port transactionSaved : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port transactionSavedError : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port transactionDeleted : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port transactionDeletedError : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port deleteCancelled : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port deleteConfirmed : (Json.Decode.Value -> msg) -> Sub msg

@@ -9,6 +9,7 @@ This is an ongoing series of learning Elm by example.
 7. In part seven we create the edit settings and add Cucumber tests ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-7/), [example](https://pablolb.github.io/elm-expenses/part-7/), [example with debugger](https://pablolb.github.io/elm-expenses/part-7-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-7)).
 8. In part eight we create the advanced edit mode ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-8/), [example](https://pablolb.github.io/elm-expenses/part-8/), [example with debugger](https://pablolb.github.io/elm-expenses/part-8-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-8)).
 9. In part nine we add confirmation dialogs ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-9/), [example](https://pablolb.github.io/elm-expenses/part-9/), [example with debugger](https://pablolb.github.io/elm-expenses/part-9-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-9)).
+10. In part ten we do an internal refactor ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-10/), [example](https://pablolb.github.io/elm-expenses/part-10/), [example with debugger](https://pablolb.github.io/elm-expenses/part-10-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-10)).
 
 ## Running locally
 

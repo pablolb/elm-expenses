@@ -15,7 +15,7 @@ import Maybe exposing (withDefault)
 import Settings as EditSettings exposing (Msg(..), Settings, decodeSettings)
 import Task
 import Time exposing (Month(..))
-import Transactions exposing (Entry, Transaction, decodeTransactions)
+import Transactions exposing (Entry, Transaction, decodeTransactions, transactionDecoder)
 
 
 
@@ -28,7 +28,6 @@ type alias Model =
     , frequentDescriptions : EditTransaction.FrequentDescriptions
     , listItems : List ListItem
     , editTransactionState : EditTransaction.State
-    , settings : Settings
     , editSettingsState : EditSettings.State
     , settingsStatus : SettingsStatus
     , currentDate : Date
@@ -75,11 +74,10 @@ initialModel =
     , frequentDescriptions = Dict.empty
     , listItems = []
     , editTransactionState = EditTransaction.emptyState
-    , settings = EditSettings.defaultSettings
     , editSettingsState = EditSettings.emptyState
     , settingsStatus = SettingsUnknown
     , currentDate = Date.fromCalendarDate 2024 Jan 1
-    , currentPage = List
+    , currentPage = Welcome
     }
 
 
@@ -88,13 +86,18 @@ initialModel =
 
 
 type Msg
-    = GotTransactions (Result Json.Decode.Error (List Transaction))
+    = InitOk (Result Json.Decode.Error Settings)
+    | InitError (Result Json.Decode.Error String)
+    | InitSuccess
+    | GotTransactions (Result Json.Decode.Error (List Transaction))
+    | GotTransactionsError (Result Json.Decode.Error String)
     | ReceiveDate Date
     | SetPage Page
     | EditTransaction Transaction
-    | GotSettings (Result Json.Decode.Error Settings)
     | GotFirstRun
     | ImportSample
+    | ImportedSample
+    | DeletedAllData
     | EditTransactionMsg EditTransaction.Msg
     | EditSettingsMsg EditSettings.Msg
 
@@ -102,10 +105,20 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        InitOk (Ok settings) ->
+            let
+                s =
+                    model.editSettingsState
+
+                editSettingsState =
+                    { s | settings = settings }
+            in
+            ( { model | editSettingsState = editSettingsState, settingsStatus = SettingsLoaded, currentPage = List }, getTransactions () )
+
         GotFirstRun ->
             let
                 editSettingsState =
-                    getSettingsFormInput model.settings
+                    getSettingsFormInput model.editSettingsState.settings
             in
             ( { model
                 | settingsStatus = NoSettings
@@ -127,7 +140,8 @@ update msg model =
                     , editMode = EditTransaction.Simple
                     , accounts = Dict.keys model.accounts
                     , descriptions = model.frequentDescriptions
-                    , settings = model.settings
+                    , settings = model.editSettingsState.settings
+                    , saving = False
                     }
               }
             , Cmd.none
@@ -136,7 +150,7 @@ update msg model =
         SetPage EditSettings ->
             ( { model
                 | currentPage = EditSettings
-                , editSettingsState = getSettingsFormInput model.settings
+                , editSettingsState = getSettingsFormInput model.editSettingsState.settings
               }
             , Cmd.none
             )
@@ -156,18 +170,18 @@ update msg model =
                 ( editTransactionState, cmd, close ) =
                     EditTransaction.update txnMsg model.editTransactionState
 
-                page =
+                ( page, ourCmd ) =
                     if close then
-                        List
+                        ( List, getTransactions () )
 
                     else
-                        model.currentPage
+                        ( model.currentPage, Cmd.none )
             in
             ( { model
                 | editTransactionState = editTransactionState
                 , currentPage = page
               }
-            , cmd |> Cmd.map EditTransactionMsg
+            , Cmd.batch [ cmd |> Cmd.map EditTransactionMsg, ourCmd ]
             )
 
         EditSettingsMsg settingsMsg ->
@@ -186,18 +200,35 @@ update msg model =
                     else
                         model.currentPage
 
-                ( settings, settingsStatus, showCancelButton ) =
+                ( transactions, listItems ) =
                     if settingsMsg == DeleteAllConfirmed then
-                        ( EditSettings.defaultSettings, NoSettings, False )
+                        ( [], [] )
 
                     else
-                        ( model.settings, model.settingsStatus, editSettingsState.showCancelButton )
+                        ( model.transactions, model.listItems )
+
+                ( accounts, frequentDescriptions ) =
+                    if settingsMsg == DeleteAllConfirmed then
+                        ( Dict.empty, Dict.empty )
+
+                    else
+                        ( model.accounts, model.frequentDescriptions )
+
+                ( settingsStatus, showCancelButton ) =
+                    if settingsMsg == DeleteAllConfirmed then
+                        ( NoSettings, False )
+
+                    else
+                        ( model.settingsStatus, editSettingsState.showCancelButton )
             in
             ( { model
                 | editSettingsState = { editSettingsState | showCancelButton = showCancelButton }
                 , currentPage = currentPage
-                , settings = settings
                 , settingsStatus = settingsStatus
+                , transactions = transactions
+                , accounts = accounts
+                , listItems = listItems
+                , frequentDescriptions = frequentDescriptions
               }
             , cmd |> Cmd.map EditSettingsMsg
             )
@@ -225,8 +256,11 @@ update msg model =
         ImportSample ->
             ( { model | currentPage = List }, EditSettings.importSampleData () )
 
-        GotSettings (Ok settings) ->
-            ( { model | settings = settings, settingsStatus = SettingsLoaded, currentPage = List }, Cmd.none )
+        ImportedSample ->
+            ( model, getTransactions () )
+
+        DeletedAllData ->
+            ( initialModel, initialize () )
 
         _ ->
             ( model, Cmd.none )
@@ -470,10 +504,10 @@ defaultFormInput model =
     , version = ""
     , date = Date.toIsoString model.currentDate
     , description = ""
-    , destination = List.head model.settings.destinationAccounts |> Maybe.withDefault ""
-    , source = List.head model.settings.sourceAccounts |> Maybe.withDefault ""
+    , destination = List.head model.editSettingsState.settings.destinationAccounts |> Maybe.withDefault ""
+    , source = List.head model.editSettingsState.settings.sourceAccounts |> Maybe.withDefault ""
     , amount = ""
-    , currency = model.settings.defaultCurrency
+    , currency = model.editSettingsState.settings.defaultCurrency
     , extraDestinations = []
     , extraSources = []
     }
@@ -497,13 +531,15 @@ transactionFormInput txn model =
     , editMode = EditTransaction.Simple
     , accounts = Dict.keys model.accounts
     , descriptions = model.frequentDescriptions
-    , settings = model.settings
+    , settings = model.editSettingsState.settings
+    , saving = False
     }
 
 
 getSettingsFormInput : Settings -> EditSettings.State
 getSettingsFormInput settings =
-    { inputs =
+    { settings = settings
+    , inputs =
         { version = settings.version
         , defaultCurrency = settings.defaultCurrency
         , destinationAccounts = String.join "\n" settings.destinationAccounts
@@ -511,7 +547,18 @@ getSettingsFormInput settings =
         }
     , results = Nothing
     , showCancelButton = True
+    , saving = False
     }
+
+
+
+---- PORTS ELM => JS ----
+
+
+port initialize : () -> Cmd msg
+
+
+port getTransactions : () -> Cmd msg
 
 
 
@@ -524,7 +571,19 @@ port gotFirstRun : (Json.Decode.Value -> msg) -> Sub msg
 port gotTransactions : (Json.Decode.Value -> msg) -> Sub msg
 
 
-port gotSettings : (Json.Decode.Value -> msg) -> Sub msg
+port gotTransactionsError : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port gotInitOk : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port gotInitError : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port importedSampleData : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port deletedAllData : (Json.Decode.Value -> msg) -> Sub msg
 
 
 
@@ -533,7 +592,10 @@ port gotSettings : (Json.Decode.Value -> msg) -> Sub msg
 
 initialCmd : Cmd Msg
 initialCmd =
-    Date.today |> Task.perform ReceiveDate
+    Cmd.batch
+        [ initialize ()
+        , Date.today |> Task.perform ReceiveDate
+        ]
 
 
 init : () -> ( Model, Cmd Msg )
@@ -541,16 +603,31 @@ init _ =
     ( initialModel, initialCmd )
 
 
+stringDecoder : Json.Decode.Value -> Result Json.Decode.Error String
+stringDecoder =
+    Json.Decode.decodeValue Json.Decode.string
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ gotTransactions (decodeTransactions >> GotTransactions)
-        , gotSettings (decodeSettings >> GotSettings)
+        , gotInitOk (decodeSettings >> InitOk)
+        , gotInitError (stringDecoder >> InitError)
         , gotFirstRun (\_ -> GotFirstRun)
-        , Sub.map EditTransactionMsg (EditTransaction.cancelDelete (\_ -> EditTransaction.DeleteCancelled))
-        , Sub.map EditTransactionMsg (EditTransaction.confirmDelete (\_ -> EditTransaction.DeleteConfirmed))
-        , Sub.map EditSettingsMsg (EditSettings.cancelDeleteAll (\_ -> EditSettings.DeleteAllCancelled))
-        , Sub.map EditSettingsMsg (EditSettings.confirmDeleteAll (\_ -> EditSettings.DeleteAllConfirmed))
+        , gotTransactionsError (stringDecoder >> GotTransactionsError)
+        , importedSampleData (\_ -> ImportedSample)
+        , deletedAllData (\_ -> DeletedAllData)
+        , Sub.map EditTransactionMsg (EditTransaction.transactionSaved (Json.Decode.decodeValue transactionDecoder >> EditTransaction.TransactionSaved))
+        , Sub.map EditTransactionMsg (EditTransaction.transactionSavedError (stringDecoder >> EditTransaction.TransactionSavedError))
+        , Sub.map EditTransactionMsg (EditTransaction.transactionDeleted (\_ -> EditTransaction.TransactionDeleted))
+        , Sub.map EditTransactionMsg (EditTransaction.transactionDeletedError (stringDecoder >> EditTransaction.TransactionDeletedError))
+        , Sub.map EditTransactionMsg (EditTransaction.deleteCancelled (\_ -> EditTransaction.DeleteCancelled))
+        , Sub.map EditTransactionMsg (EditTransaction.deleteConfirmed (\_ -> EditTransaction.DeleteConfirmed))
+        , Sub.map EditSettingsMsg (EditSettings.deleteAllCancelled (\_ -> EditSettings.DeleteAllCancelled))
+        , Sub.map EditSettingsMsg (EditSettings.deleteAllConfirmed (\_ -> EditSettings.DeleteAllConfirmed))
+        , Sub.map EditSettingsMsg (EditSettings.settingsSaved (decodeSettings >> EditSettings.SettingsSaved))
+        , Sub.map EditSettingsMsg (EditSettings.settingsSavedError (stringDecoder >> EditSettings.SettingsSavedError))
         ]
 
 

@@ -19,10 +19,32 @@ Cypress.Commands.add(
 )
 
 Cypress.Commands.add(
+    'sendTransactionsToElm',
+    () => cy.window().its('ElmExpenses').then(e => e.sendTransactionsToElm())
+)
+
+Cypress.Commands.add(
     'addTransaction',
-    (txnInput) => cy.window()
+    (txnInput) => {
+        cy.window()
         .its('ElmExpenses')
         .then(
-            ElmExpenses => ElmExpenses.putTransaction(txnInput)
+            ElmExpenses => ElmExpenses.saveTransaction({
+                id: "",
+                version: "",
+                date: txnInput.date,
+                description: txnInput.description,
+                destination: {
+                  account: txnInput.destination,
+                  currency: txnInput.currency,
+                  amount: txnInput.amount
+                },
+                source: {
+                  account: txnInput.source,
+                  currency: txnInput.currency,
+                  amount: -1 * txnInput.amount
+                }
+              })
         )
+    }
 )
