@@ -1,7 +1,17 @@
 const { Given, When, Then } = require("@badeball/cypress-cucumber-preprocessor")
 
+
+Given('I reload the app', () => {
+    cy.visit('/')
+})
+
+
 Given("I have saved the default settings", () => {
     cy.createDefaultSettings()
+})
+
+Given('an encrypted app with password {string}' , (password) => {
+    cy.createDefaultSettings(password)
 })
 
 Given(/^I have saved the following transactions:$/, table => {
@@ -48,6 +58,11 @@ When('I click the "Delete" button', () => cy.get('[data-cy="delete"]').click())
 When('I answer "yes" in the confirmation message', () => cy.get('[data-cy="confirm-modal"]').click())
 When('I answer "no" in the confirmation message', () => cy.get('[data-cy="cancel-modal"]').click())
 
+When('I enter the password {string}', password => {
+    cy.get('[data-cy="current-password"]').clear().type(password)
+})
+When('I click the "Open" button', () => cy.get('[data-cy="open"]').click())
+
 Then('the date is {string}', text => cy.get('[data-cy="date"]').should('have.value', text))
 Then('the description is {string}', text => cy.get('[data-cy="description"]').should('have.value', text))
 Then('the selected expense account is {string}', account => {
@@ -85,8 +100,19 @@ When(/^I set the source accounts to:$/, table => {
     cy.get('[data-cy="source-accounts"]').clear().type(accounts)
 })
 
-When("I save my settings", () => cy.get('[data-cy="save"]').click())
+When('I set the current password to {string}', password => {
+    cy.get('[data-cy="current-password"]').clear().type(password)
+})
 
+When('I set the new password to {string}', password => {
+    cy.get('[data-cy="new-password"]').clear().type(password)
+})
+
+When('I set the new password confirmation to {string}', password => {
+    cy.get('[data-cy="new-password-confirm"]').clear().type(password)
+})
+
+When("I save my settings", () => cy.get('[data-cy="save"]').click())
 
 Then('the default currency is "{word}"', currency => cy.get('[data-cy="default-currency"]').should('have.value', currency))
 

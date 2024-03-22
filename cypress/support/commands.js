@@ -1,11 +1,11 @@
 Cypress.Commands.add(
     'createDefaultSettings',
-    () => cy.window().its('ElmExpenses').then(e => e.saveSettings({
+    (password = null) => cy.window().its('ElmExpenses').then(e => e.saveSettings({
         version: "",
         defaultCurrency: "USD",
         destinationAccounts: [ "Expenses:Groceries", "Expenses:Eat Out & Take Away" ],
         sourceAccounts: [ "Assets:Cash", "Assets:Bank:Checking", "Liabilities:CreditCard" ]
-    }))
+    }, password))
 )
 
 Cypress.Commands.add(
@@ -47,4 +47,9 @@ Cypress.Commands.add(
               })
         )
     }
+)
+
+Cypress.Commands.add(
+    'readRawDataFromDb',
+    (name) => cy.window().its('ElmExpenses').then(e => e.readRawDataFromDb(name))
 )

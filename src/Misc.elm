@@ -57,6 +57,11 @@ isOk res =
             True
 
 
+dropSuccess : Result String a -> Result String String
+dropSuccess res =
+    Result.map (\_ -> "") res
+
+
 keepError : Result String a -> Maybe String
 keepError res =
     case res of

@@ -18,24 +18,7 @@ async function main() {
   const glue = buildGlue(app, dbPort);
 
   if (exposeJsApi) {
-
-    /**
-     * This function creates a DevApi instance that re-creates
-     * itself after deleteAllData is called.
-     * 
-     * It assigns window.ElmExpenses to the latest one.
-     */
-    const buildDevApi = () => {
-      
-      window.ElmExpenses = new DevApi(app.ports, dbPort, async () => {
-        dbPort = new DbPort();
-        glue.setDbPort(dbPort);
-        buildDevApi();
-        await dbPort.openDbs();
-      });
-    }
-
-    buildDevApi();
+    window.ElmExpenses = new DevApi(app.ports, dbPort, np => glue.setDbPort(np));
   }
 
 }

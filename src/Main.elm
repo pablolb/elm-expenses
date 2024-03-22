@@ -118,7 +118,7 @@ update msg model =
         GotFirstRun ->
             let
                 editSettingsState =
-                    getSettingsFormInput model.editSettingsState.settings
+                    getSettingsFormInput model.editSettingsState
             in
             ( { model
                 | settingsStatus = NoSettings
@@ -150,7 +150,7 @@ update msg model =
         SetPage EditSettings ->
             ( { model
                 | currentPage = EditSettings
-                , editSettingsState = getSettingsFormInput model.editSettingsState.settings
+                , editSettingsState = getSettingsFormInput model.editSettingsState
               }
             , Cmd.none
             )
@@ -536,14 +536,22 @@ transactionFormInput txn model =
     }
 
 
-getSettingsFormInput : Settings -> EditSettings.State
-getSettingsFormInput settings =
-    { settings = settings
+getSettingsFormInput : EditSettings.State -> EditSettings.State
+getSettingsFormInput state =
+    let
+        settings =
+            state.settings
+    in
+    { encryption = state.encryption
+    , settings = settings
     , inputs =
         { version = settings.version
         , defaultCurrency = settings.defaultCurrency
         , destinationAccounts = String.join "\n" settings.destinationAccounts
         , sourceAccounts = String.join "\n" settings.sourceAccounts
+        , currentPassword = ""
+        , newPassword = ""
+        , newPasswordConfirm = ""
         }
     , results = Nothing
     , showCancelButton = True
@@ -628,6 +636,9 @@ subscriptions _ =
         , Sub.map EditSettingsMsg (EditSettings.deleteAllConfirmed (\_ -> EditSettings.DeleteAllConfirmed))
         , Sub.map EditSettingsMsg (EditSettings.settingsSaved (decodeSettings >> EditSettings.SettingsSaved))
         , Sub.map EditSettingsMsg (EditSettings.settingsSavedError (stringDecoder >> EditSettings.SettingsSavedError))
+        , Sub.map EditSettingsMsg (EditSettings.gotEncryptedSettings (\_ -> EditSettings.GotEncryptedSettings))
+        , Sub.map EditSettingsMsg (EditSettings.decryptedSettingsError (\_ -> EditSettings.GotDecryptionError))
+        , Sub.map EditSettingsMsg (EditSettings.decryptedSettings (stringDecoder >> EditSettings.GotDecryptionSuccess))
         ]
 
 

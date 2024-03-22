@@ -22,4 +22,5 @@ import './commands'
 beforeEach(() => {
     cy.visit('/')
     cy.deleteAllData()
+    cy.visit('/')
 })

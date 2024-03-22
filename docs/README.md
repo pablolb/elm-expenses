@@ -14,3 +14,4 @@ You can start by reading the [first post of the series](https://blog.mrbelloc.de
 | [Advanced edit form](https://blog.mrbelloc.dev/posts/trying-out-elm-8/)      | [link](https://pablolb.github.io/elm-expenses/part-8/)  | [link](https://pablolb.github.io/elm-expenses/part-8-debug/)  |
 | [Confirmation dialogs](https://blog.mrbelloc.dev/posts/trying-out-elm-9/)    | [link](https://pablolb.github.io/elm-expenses/part-9/)  | [link](https://pablolb.github.io/elm-expenses/part-9-debug/)  |
 | [Internal refactor](https://blog.mrbelloc.dev/posts/trying-out-elm-10/)      | [link](https://pablolb.github.io/elm-expenses/part-10/) | [link](https://pablolb.github.io/elm-expenses/part-10-debug/) |
+| [Encryption](https://blog.mrbelloc.dev/posts/trying-out-elm-11/)             | [link](https://pablolb.github.io/elm-expenses/part-11/) | [link](https://pablolb.github.io/elm-expenses/part-11-debug/) |

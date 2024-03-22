@@ -1,18 +1,22 @@
 import buildSample from './SampleData';
+import { DbPort } from './DbPort';
+import PouchDb from 'pouchdb-browser';
 
 class DevApi {
-    constructor(appPorts, dbPort, onDeleteAllData) {
+    constructor(appPorts, dbPort, onNewDbPort) {
         this.appPorts = appPorts;
-        this.dbPort = dbPort
-        this.onDeleteAllData = onDeleteAllData;
+        this.dbPort = dbPort;
+        this.onNewDbPort = onNewDbPort;
     }
 
-    async saveSettings(settings) {
-        const newSettings = await this.dbPort.saveSettings(settings);
+    async saveSettings(settings, password) {
+        await this.dbPort.assureDbsOpened();
+        const newSettings = await this.dbPort.saveSettings(settings, password);
         this.appPorts.gotInitOk.send(newSettings);
     }
 
     async saveTransaction(transaction) {
+        await this.dbPort.assureDbsOpened();
         await this.dbPort.saveTransaction(transaction);
     }
 
@@ -27,7 +31,15 @@ class DevApi {
 
     async deleteAllData() {
         await this.dbPort.deleteAllData();
-        this.onDeleteAllData();
+        const dbPort = new DbPort();
+        await dbPort.openDbs();
+        this.dbPort = dbPort;
+        this.onNewDbPort(dbPort);
+    }
+
+    readRawDataFromDb(name) {
+        const db = new PouchDb(name);
+        return db.allDocs({include_docs: true}).then(results => results.rows.map(row => row.doc));
     }
 }
 

@@ -1,4 +1,4 @@
-import { InitResponseFirstRun, InitResponseOk } from './DbPort';
+import { InitResponseFirstRun, InitResponseOk, InitResponseEncrypted, InvalidPassphrase } from './DbPort';
 import buildSample from './SampleData';
 
 function buildGlue(app, dbPortIn) {
@@ -12,14 +12,32 @@ function buildGlue(app, dbPortIn) {
             app.ports.gotFirstRun.send();
           } else if (resp instanceof InitResponseOk) {
             app.ports.gotInitOk.send(resp.settings);
+          } else if (resp instanceof InitResponseEncrypted) {
+            app.ports.gotEncryptedSettings.send();
           } else {
             console.error('Unknown response', resp);
             app.ports.gotInitError.send(`Unknown response ${JSON.stringify(resp)}`);
           }
         } catch (e) {
-          console.log(e);
+          console.error(e);
           app.ports.gotInitError.send(e.message);
         }
+    });
+
+    app.ports.decryptSettings.subscribe(async function(password) {
+      try {
+        await dbPort.openDbs(password);
+        const settings = await dbPort.getSettings();
+        app.ports.decryptedSettings.send(password);
+        app.ports.gotInitOk.send(settings);
+      } catch (e) {
+        if (e instanceof InvalidPassphrase) {
+          app.ports.decryptedSettingsError.send();
+        } else {
+          console.error(e);
+          app.ports.gotInitError.send(e.message);
+        }
+      }
     });
     
       app.ports.getTransactions.subscribe(async () => {
@@ -32,9 +50,10 @@ function buildGlue(app, dbPortIn) {
         }
       });
     
-      app.ports.saveSettings.subscribe(async (elmSettings) => {
+      app.ports.saveSettings.subscribe(async (saveSettingsArgs) => {
+        const [elmSettings, password] = saveSettingsArgs;
         try {
-          const newElmSettings = await dbPort.saveSettings(elmSettings);
+          const newElmSettings = await dbPort.saveSettings(elmSettings, password);
           app.ports.settingsSaved.send(newElmSettings);
         } catch (e) {
           console.error(e);
