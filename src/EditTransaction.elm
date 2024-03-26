@@ -334,7 +334,7 @@ isAmountValid a =
                 Ok (float * 100 |> round)
 
 
-viewForm : State -> Html Msg
+viewForm : State -> ( Html Msg, List (Html Msg) )
 viewForm model =
     let
         f : Input
@@ -386,7 +386,7 @@ viewForm model =
             else
                 SubmitForm
     in
-    div []
+    ( div []
         [ form
             [ class "ui large form"
             , classList
@@ -430,17 +430,27 @@ viewForm model =
                 , viewSourceInput model
                 ]
             , viewFormValidation model.results
-            , button [ class "positive ui button right floated", classList [ ( "disabled", model.saving ) ], cyAttr "submit" ]
-                [ text "Submit" ]
-            , div [ class "ui button", onClick Close ]
-                [ text "Cancel" ]
             , maybeViewDeleteButton f
             ]
-        , viewToggleEditModeButton model.editMode
         , viewAccountsDataList model
         , viewDescriptionsDataList model.descriptions
         , viewConfirmModal
         ]
+    , [ div [ class "item" ]
+            [ div [ class "ui button", onClick Close ]
+                [ text "Cancel" ]
+            ]
+      , div [ class "right menu" ]
+            [ div [ class "item" ]
+                [ viewToggleEditModeButton model.editMode
+                ]
+            , div [ class "item", cyAttr "submit", onClick cmd ]
+                [ button [ class "positive ui button right floated", classList [ ( "disabled", model.saving ) ] ]
+                    [ text "Submit" ]
+                ]
+            ]
+      ]
+    )
 
 
 viewDestinationInput : State -> Html Msg
@@ -492,11 +502,9 @@ viewToggleEditModeButton editMode =
         isChecked =
             editMode == Advanced
     in
-    div [ class "fab" ]
-        [ div [ class "ui toggle checkbox" ]
-            [ input [ id "toggle-advanced", type_ "checkbox", cyAttr "toggle-advanced", checked isChecked, onClick ToggleEditMode ] []
-            , label [ for "toggle-advanced" ] [ text "Advanced Edit" ]
-            ]
+    div [ class "ui toggle checkbox" ]
+        [ input [ id "toggle-advanced", type_ "checkbox", cyAttr "toggle-advanced", checked isChecked, onClick ToggleEditMode ] []
+        , label [ for "toggle-advanced" ] [ text "Advanced Edit" ]
         ]
 
 

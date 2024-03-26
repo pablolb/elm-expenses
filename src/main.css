@@ -9,12 +9,37 @@
   height: inherit;
 }
 
+/********
+https://gist.github.com/nicolaskopp/637aa4e20c66fe41a6ea2a0773935f6e
+*/
+ :root                  { box-sizing: border-box; }
+ *, *::before, *::after { box-sizing: inherit; }
+ 
+ :root, body {
+   margin: 0;
+   padding: 0;
+   border: initial;
+ }
+ 
+ body {
+   overflow: hidden;
+   width: 100lvw;
+   height: 100lvh;
+ }
+/*********/
+
+
+.main-content {
+  overflow-y: scroll;
+  height: calc(100vh - 50px)
+}
+
 div.date {
   background-color: #ebeaea;
   padding-top: 4px;
   font-size: 1.2rem;
   color:#64696e;
-  top: 0;
+  top:-1em;
   position: sticky;
 }
 

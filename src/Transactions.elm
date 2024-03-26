@@ -37,6 +37,31 @@ transactionToJson txn =
     JsonTransaction txn.id txn.version (Date.toIsoString txn.date) txn.description txn.destination txn.source
 
 
+type BalanceError
+    = AllZeroError
+    | MultiCurrencyError
+    | NotBalanced Int
+
+
+isBalanced : Transaction -> Result BalanceError Transaction
+isBalanced txn =
+    let
+        diff =
+            txn.destination.amount + txn.source.amount
+    in
+    if txn.source.amount == 0 && txn.destination.amount == 0 then
+        Err AllZeroError
+
+    else if txn.source.currency /= txn.destination.currency then
+        Err MultiCurrencyError
+
+    else if diff == 0 then
+        Ok txn
+
+    else
+        Err (NotBalanced diff)
+
+
 
 ---- DECODERS ----
 
@@ -58,6 +83,11 @@ transactionDecoder =
         |> required "description" Json.Decode.string
         |> required "destination" entryDecoder
         |> required "source" entryDecoder
+
+
+transactionsDecoder : Json.Decode.Decoder (List Transaction)
+transactionsDecoder =
+    Json.Decode.list transactionDecoder
 
 
 dateDecoder : Json.Decode.Decoder Date

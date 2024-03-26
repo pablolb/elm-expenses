@@ -2,6 +2,7 @@ port module Settings exposing
     ( Msg(..)
     , Settings
     , State
+    , Working(..)
     , decodeSettings
     , decryptedSettings
     , decryptedSettingsError
@@ -13,16 +14,22 @@ port module Settings exposing
     , importSampleData
     , settingsSaved
     , settingsSavedError
+    , transactionsImported
+    , transactionsImportedError
     , update
     , viewForm
     )
 
-import Html exposing (Html, div, form, input, label, p, text, textarea)
-import Html.Attributes exposing (attribute, class, classList, name, placeholder, type_, value)
+import File exposing (File)
+import File.Select as Select
+import Html exposing (Html, button, div, form, i, input, label, p, text, textarea)
+import Html.Attributes exposing (attribute, class, classList, name, placeholder, title, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Json.Decode
 import Json.Decode.Pipeline exposing (required)
-import Misc exposing (cyAttr, dropSuccess, isFieldNotBlank, keepError, viewConfirmModal)
+import Misc exposing (cyAttr, dropSuccess, isError, isFieldNotBlank, keepError, viewConfirmModal)
+import Task
+import Transactions exposing (JsonTransaction, isBalanced, transactionToJson, transactionsDecoder)
 
 
 type alias Settings =
@@ -43,8 +50,15 @@ type alias State =
     , inputs : Inputs
     , results : Maybe Results
     , showCancelButton : Bool
-    , saving : Bool
+    , error : Maybe String
+    , working : Working
     }
+
+
+type Working
+    = NotWorking
+    | Saving
+    | Importing
 
 
 type EncryptionStatus
@@ -93,6 +107,11 @@ type Msg
     | GotDecryptionError
     | GotDecryptionSuccess (Result Json.Decode.Error String)
     | DecryptSettings
+    | JsonRequested
+    | JsonSelected File
+    | JsonLoaded String
+    | TransactionsImported
+    | TransactionsImportedError (Result Json.Decode.Error String)
     | NoOp
 
 
@@ -109,9 +128,10 @@ emptyState =
         , newPassword = ""
         , newPasswordConfirm = ""
         }
+    , error = Nothing
     , results = Nothing
     , showCancelButton = False
-    , saving = False
+    , working = NotWorking
     }
 
 
@@ -195,24 +215,24 @@ update msg model =
                 isValid =
                     validateForm model.encryption model.inputs
 
-                ( results, cmd ) =
+                ( results, cmd, working ) =
                     case isValid of
                         Err e ->
-                            ( Just e, Cmd.none )
+                            ( Just e, Cmd.none, model.working )
 
                         Ok (ValidSettings settings newPassword) ->
-                            ( Nothing, saveSettings ( settings, newPassword ) )
+                            ( Nothing, saveSettings ( settings, newPassword ), Saving )
             in
-            ( { model | results = results }, cmd, False )
+            ( { model | results = results, working = working }, cmd, False )
 
         SettingsSavedError _ ->
-            ( { model | saving = False }, Cmd.none, False )
+            ( { model | working = NotWorking }, Cmd.none, False )
 
         SettingsSaved (Err _) ->
-            ( { model | saving = False }, Cmd.none, False )
+            ( { model | working = NotWorking }, Cmd.none, False )
 
         SettingsSaved (Ok settings) ->
-            ( { model | settings = settings, saving = False }, Cmd.none, True )
+            ( { model | settings = settings, working = NotWorking }, Cmd.none, True )
 
         ImportSample ->
             ( model, importSampleData (), True )
@@ -241,11 +261,43 @@ update msg model =
         GotDecryptionSuccess (Err _) ->
             ( model, Cmd.none, False )
 
+        JsonRequested ->
+            ( model, requestImportJson JsonSelected, False )
+
+        JsonSelected file ->
+            ( { model | working = Importing }, Task.perform JsonLoaded (File.toString file), False )
+
+        JsonLoaded jsonString ->
+            let
+                ( cmd, error, working ) =
+                    case Json.Decode.decodeString transactionsDecoder jsonString of
+                        Ok txns ->
+                            let
+                                errors =
+                                    txns |> List.map isBalanced |> List.filter isError
+                            in
+                            if List.isEmpty errors then
+                                ( List.map transactionToJson txns |> importTransactions, Nothing, model.working )
+
+                            else
+                                ( Cmd.none, Just "Some transactions are not balanced or not supported!", NotWorking )
+
+                        Err _ ->
+                            ( Cmd.none, Just "Error decoding JSON", NotWorking )
+            in
+            ( { model | error = error, working = working }, cmd, False )
+
+        TransactionsImported ->
+            ( { model | working = NotWorking }, Cmd.none, True )
+
+        TransactionsImportedError _ ->
+            ( { model | working = NotWorking }, Cmd.none, False )
+
         NoOp ->
             ( model, Cmd.none, False )
 
 
-viewForm : State -> Html Msg
+viewForm : State -> ( Html Msg, List (Html Msg) )
 viewForm model =
     case model.encryption of
         Encrypted ->
@@ -258,7 +310,7 @@ viewForm model =
             viewFormDecrypted model
 
 
-viewFormAskPassword : State -> Html Msg
+viewFormAskPassword : State -> ( Html Msg, List (Html Msg) )
 viewFormAskPassword model =
     let
         errorView =
@@ -268,40 +320,76 @@ viewFormAskPassword model =
             else
                 div [] []
     in
-    div []
+    ( div []
         [ form [ class "ui large form", onSubmit DecryptSettings ]
             [ div [ class "field" ]
                 [ label [] [ text "Enter password" ]
                 , input [ name "currentPassword", type_ "password", cyAttr "current-password", attribute "autocomplete" "current-password", value model.inputs.currentPassword, onInput EditCurrentPassword ] []
                 ]
-            , div [ class "ui positive button right floated", cyAttr "open", onClick DecryptSettings ]
-                [ text "Open" ]
             ]
         , errorView
         ]
+    , [ div [ class "right menu" ]
+            [ div [ class "ui positive button right floated", cyAttr "open", onClick DecryptSettings ]
+                [ text "Open" ]
+            ]
+      ]
+    )
 
 
-viewFormDecrypted : State -> Html Msg
+viewFormDecrypted : State -> ( Html Msg, List (Html Msg) )
 viewFormDecrypted model =
     let
         f =
             model.inputs
 
+        importIcon =
+            if model.working == Importing then
+                "loading spinner icon"
+
+            else
+                "folder open icon"
+
         otherButtons =
             if model.showCancelButton then
-                [ div [ class "ui button", cyAttr "cancel", onClick Cancel ] [ text "Cancel" ]
-                , div [ class "ui blue button", cyAttr "import-sample", onClick ImportSample ] [ text "Import Sample" ]
-                , div [ class "ui negative button", cyAttr "delete-all-data", onClick DeleteAllRequested ] [ text "Delete All Data" ]
+                [ div [ class "item" ] [ div [ class "ui button", cyAttr "cancel", onClick Cancel ] [ text "Cancel" ] ]
+                , div [ class "item" ]
+                    [ div [ class "ui basic button", cyAttr "import-sample", onClick ImportSample ]
+                        [ i [ class "angle double down icon" ] []
+                        , text "Import sample"
+                        ]
+                    ]
+                , div [ class "item" ]
+                    [ div [ class "ui basic button", classList [ ( "disabled", model.working /= NotWorking ) ], cyAttr "import-json", onClick JsonRequested ]
+                        [ i [ class importIcon ] []
+                        , text "Import JSON"
+                        ]
+                    ]
+                , div [ class "item" ]
+                    [ div [ class "ui negative button", cyAttr "delete-all-data", onClick DeleteAllRequested ]
+                        [ i [ class "delete icon" ] []
+                        , text "Delete ALL"
+                        ]
+                    ]
                 ]
 
             else
                 []
 
+        error : List String
+        error =
+            case model.error of
+                Just e ->
+                    [ e ]
+
+                _ ->
+                    []
+
         errors : List String
         errors =
             case model.results of
                 Nothing ->
-                    []
+                    [] ++ error
 
                 Just res ->
                     [ res.defaultCurrency
@@ -322,21 +410,21 @@ viewFormDecrypted model =
             else
                 div [] []
     in
-    div []
+    ( div []
         [ form [ class "ui large form", classList [ ( "error", hadErrors ) ], onSubmit SubmitForm ]
-            ([ div [ class "field" ]
+            [ div [ class "field" ]
                 [ label [] [ text "Default currency" ]
                 , input [ name "defaultCurrency", cyAttr "default-currency", placeholder "USD", value f.defaultCurrency, onInput EditDefaultCurrency ] []
                 ]
-             , div [ class "field" ]
+            , div [ class "field" ]
                 [ label [] [ text "Expense accounts" ]
                 , textarea [ name "destinationAccounts", cyAttr "destination-accounts", placeholder "Expenses:Groceries\nExpenses:Eat Out & Take Away", value f.destinationAccounts, onInput EditDestinationAccounts ] []
                 ]
-             , div [ class "field" ]
+            , div [ class "field" ]
                 [ label [] [ text "Source accounts" ]
                 , textarea [ name "sourceAccounts", cyAttr "source-accounts", placeholder "Assets:Cash\nLiabilities:CreditCard", value f.sourceAccounts, onInput EditSourceAccounts ] []
                 ]
-             , case model.encryption of
+            , case model.encryption of
                 Decrypted _ ->
                     div [ class "field" ]
                         [ label [] [ text "Current password" ]
@@ -345,23 +433,27 @@ viewFormDecrypted model =
 
                 _ ->
                     div [] []
-             , div [ class "field" ]
+            , div [ class "field" ]
                 [ label [] [ text "New password" ]
                 , input [ name "newPassword", type_ "password", cyAttr "new-password", attribute "autocomplete" "new-password", value f.newPassword, onInput EditNewPassword ] []
                 ]
-             , div [ class "field" ]
+            , div [ class "field" ]
                 [ label [] [ text "Confirm new password" ]
                 , input [ name "newPasswordConfirm", type_ "password", cyAttr "new-password-confirm", attribute "autocomplete" "new-password", value f.newPasswordConfirm, onInput EditNewPasswordConfirm ] []
                 ]
-             , errorView
-             ]
-                ++ otherButtons
-                ++ [ div [ class "ui positive button right floated", cyAttr "save", onClick SubmitForm ]
-                        [ text "Save" ]
-                   ]
-            )
+            , errorView
+            ]
         , viewConfirmModal
         ]
+    , otherButtons
+        ++ [ div [ class "right menu" ]
+                [ div [ class "item", classList [ ( "disabled", model.working /= NotWorking ) ], cyAttr "save", onClick SubmitForm ]
+                    [ button [ class "ui positive button right floated" ]
+                        [ text "Save" ]
+                    ]
+                ]
+           ]
+    )
 
 
 validateForm : EncryptionStatus -> Inputs -> Result Results ValidSettings
@@ -433,6 +525,11 @@ viewFormErrors errors =
         )
 
 
+requestImportJson : (File -> msg) -> Cmd msg
+requestImportJson a =
+    Select.file [ "application/json" ] a
+
+
 settingsDecoder : Json.Decode.Decoder Settings
 settingsDecoder =
     Json.Decode.succeed Settings
@@ -454,6 +551,9 @@ port decryptedSettingsError : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port decryptedSettings : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port importTransactions : List JsonTransaction -> Cmd msg
 
 
 port decryptSettings : String -> Cmd msg
@@ -481,3 +581,9 @@ port deleteAllCancelled : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port deleteAllConfirmed : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port transactionsImported : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port transactionsImportedError : (Json.Decode.Value -> msg) -> Sub msg

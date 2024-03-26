@@ -44,6 +44,24 @@ function setRandomTxnId(txn) {
     delete txn._rev;
 }
 
+const emptyCursor = () => ({ nextId: null });
+function parsePageToken(pageToken) {
+    if (null == pageToken) {
+        return emptyCursor();
+    }
+    try {
+        const json = atob(pageToken);
+        return JSON.parse(json);
+    } catch (e) {
+        console.error("Error parsing token", e);
+        return emptyCursor();
+    }
+}
+
+function createPageToken(cursor) {
+    return btoa(JSON.stringify(cursor));
+}
+
 class DbPort {
 
     constructor() {
@@ -57,10 +75,11 @@ class DbPort {
     async openDbs(password = null) {
         this.settingsDb = await buildDb(this.settingsDbName, password);
         this.dataDb = await buildDb(this.dataDbName, password);
+        return Promise.resolve();
     }
 
     assureDbsOpened() {
-        if (null == this.settingsDb) {
+        if (null == this.dataDb || null == this.settingsDb) {
             return this.openDbs();
         }
         return Promise.resolve();
@@ -125,9 +144,29 @@ class DbPort {
         return mapDocToElm(settings);
     }
 
-    async getTransactions() {
-        const result = await this.dataDb.allDocs({include_docs: true, descending: true});
-        return result.rows.map(row => mapDocToElm(row.doc));
+    async getTransactions(request) {
+        const opts = {
+            include_docs: true,
+            descending: true,
+            limit: request.maxPageSize + 1
+        };
+        const cursor = parsePageToken(request.pageToken);
+        if (cursor.nextId) {
+            opts.startkey = cursor.nextId;
+        }
+        const result = await this.dataDb.allDocs(opts);
+        const results = result.rows
+                        .slice(0, request.maxPageSize)
+                        .map(row => mapDocToElm(row.doc));
+
+        let nextPageToken = null;
+        if (result.rows.length > request.maxPageSize) {
+            // more results!
+            nextPageToken = createPageToken({
+                nextId: result.rows[request.maxPageSize].id
+            });
+        }
+        return { results, nextPageToken };
     }
 
     async saveTransaction(elmTxn) {
@@ -139,12 +178,14 @@ class DbPort {
     }
 
     async saveTransactions(elmTransactions) {
-        const transactions = elmTransactions.map(t => {
-            setRandomTxnId(t);
-            return t;
+        const transactions = elmTransactions.map(elmTxn => {
+            const txn = mapDocFromElm(elmTxn);
+            setRandomTxnId(txn);
+            return txn;
         });
         await this.dataDb.bulkDocs(transactions);
     }
+
 
     async deleteTransaction(id, version) {
         await this.dataDb.remove(id, version);

@@ -7,6 +7,7 @@ class DevApi {
         this.appPorts = appPorts;
         this.dbPort = dbPort;
         this.onNewDbPort = onNewDbPort;
+        this.pageSize = 50;
     }
 
     async saveSettings(settings, password) {
@@ -20,8 +21,15 @@ class DevApi {
         await this.dbPort.saveTransaction(transaction);
     }
 
+    async saveTransactions(transactions) {
+        await this.dbPort.assureDbsOpened();
+        return this.dbPort.saveTransactions(transactions);
+    }
+
     async sendTransactionsToElm() {
-        const transactions = await this.dbPort.getTransactions();
+        const transactions = await this.dbPort.getTransactions({
+            maxPageSize: this.pageSize
+        });
         this.appPorts.gotTransactions.send(transactions);
     }
 
@@ -40,6 +48,10 @@ class DevApi {
     readRawDataFromDb(name) {
         const db = new PouchDb(name);
         return db.allDocs({include_docs: true}).then(results => results.rows.map(row => row.doc));
+    }
+
+    setPageSize(pageSize) {
+        this.pageSize = pageSize;
     }
 }
 

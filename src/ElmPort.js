@@ -40,9 +40,9 @@ function buildGlue(app, dbPortIn) {
       }
     });
     
-      app.ports.getTransactions.subscribe(async () => {
+      app.ports.getTransactions.subscribe(async (request) => {
         try {
-          const transactions = await dbPort.getTransactions();
+          const transactions = await dbPort.getTransactions(request);
           app.ports.gotTransactions.send(transactions);
         } catch (e) {
           console.error(e);
@@ -88,9 +88,25 @@ function buildGlue(app, dbPortIn) {
       });
     
       app.ports.importSampleData.subscribe(async () => {
-        await dbPort.saveTransactions(buildSample());
+        await dbPort.saveTransactions(buildSample().map(t => {
+          t.id = "";
+          return t;
+        }));
         app.ports.importedSampleData.send();
       });
+
+      app.ports.importTransactions.subscribe(async (transactions) => {
+        try {
+          const start = Date.now();
+          await dbPort.saveTransactions(transactions);
+          app.ports.transactionsImported.send();
+          console.log(`Imported ${transactions.length} transactions in ${Date.now() - start}ms`)
+        } catch (e) {
+          console.error(e);
+          app.ports.transactionsImportedError.send(e.message);
+        }
+      });
+
     
       app.ports.showDeleteModal.subscribe(() => {
         $('.ui.modal')

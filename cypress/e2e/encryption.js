@@ -11,6 +11,7 @@ Then('there are no unencrypted documents in PouchDB named {string}', (name) => {
 
 Then('there is an encrypted document in PouchDB named {string} with ID starting with {string}', (name, idPrefix) => {
     cy.readRawDataFromDb(name).then(docs => {
+        console.log(docs)
         if (docs.some(d => d.crypt !== undefined && d._id.startsWith(idPrefix))) {
             return;
         }

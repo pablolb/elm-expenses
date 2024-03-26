@@ -63,6 +63,8 @@ When('I enter the password {string}', password => {
 })
 When('I click the "Open" button', () => cy.get('[data-cy="open"]').click())
 
+When('I scroll to the bottom', () => cy.get('.main-content').scrollTo('bottom'))
+
 Then('the date is {string}', text => cy.get('[data-cy="date"]').should('have.value', text))
 Then('the description is {string}', text => cy.get('[data-cy="description"]').should('have.value', text))
 Then('the selected expense account is {string}', account => {
@@ -76,7 +78,7 @@ Then('the selected source account is {string}', account => {
 Then('the amount is {string}', text => cy.get('[data-cy="amount"]').should('have.value', text))
 
 
-
+Then('the text {string} should exist', text => cy.contains(text).should('exist'))
 Then('I see {string}', text => cy.contains(text).should('be.visible'))
 Then('I should not see {string}', text => cy.contains(text).should('not.exist'))
 Then('I see the "Submit" button', () => cy.get('[data-cy="submit"]').should('exist'))

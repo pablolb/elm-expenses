@@ -9,13 +9,15 @@ import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, button, div, h2, i, text)
 import Html.Attributes exposing (attribute, class, name)
 import Html.Events exposing (onClick)
+import InfiniteScroll as IS
 import Json.Decode
+import Json.Decode.Pipeline exposing (optional, required)
 import List.Extra
 import Maybe exposing (withDefault)
 import Settings as EditSettings exposing (Msg(..), Settings, decodeSettings)
 import Task
 import Time exposing (Month(..))
-import Transactions exposing (Entry, Transaction, decodeTransactions, transactionDecoder)
+import Transactions exposing (Entry, Transaction, transactionDecoder, transactionsDecoder)
 
 
 
@@ -23,7 +25,9 @@ import Transactions exposing (Entry, Transaction, decodeTransactions, transactio
 
 
 type alias Model =
-    { transactions : List Transaction
+    { infScroll : IS.Model Msg
+    , nextPageCommand : Maybe (IS.LoadMoreCmd Msg)
+    , transactions : List Transaction
     , accounts : Accounts
     , frequentDescriptions : EditTransaction.FrequentDescriptions
     , listItems : List ListItem
@@ -63,13 +67,34 @@ type SettingsStatus
     | SettingsLoaded
 
 
+type alias GetTransactionsRequest =
+    { maxPageSize : Int
+    , pageToken : Maybe String
+    }
+
+
+defaultGetTransactionsRequest : GetTransactionsRequest
+defaultGetTransactionsRequest =
+    { maxPageSize = 50
+    , pageToken = Nothing
+    }
+
+
+type alias GetTransactionsResponse =
+    { results : List Transaction
+    , nextPageToken : Maybe String
+    }
+
+
 
 ---- FORM STUFF ----
 
 
 initialModel : Model
 initialModel =
-    { transactions = []
+    { infScroll = IS.init (\_ -> Cmd.none)
+    , nextPageCommand = Nothing
+    , transactions = []
     , accounts = Dict.empty
     , frequentDescriptions = Dict.empty
     , listItems = []
@@ -89,7 +114,7 @@ type Msg
     = InitOk (Result Json.Decode.Error Settings)
     | InitError (Result Json.Decode.Error String)
     | InitSuccess
-    | GotTransactions (Result Json.Decode.Error (List Transaction))
+    | GotTransactions (Result Json.Decode.Error GetTransactionsResponse)
     | GotTransactionsError (Result Json.Decode.Error String)
     | ReceiveDate Date
     | SetPage Page
@@ -100,6 +125,7 @@ type Msg
     | DeletedAllData
     | EditTransactionMsg EditTransaction.Msg
     | EditSettingsMsg EditSettings.Msg
+    | InfiniteScrollMsg IS.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -113,7 +139,14 @@ update msg model =
                 editSettingsState =
                     { s | settings = settings }
             in
-            ( { model | editSettingsState = editSettingsState, settingsStatus = SettingsLoaded, currentPage = List }, getTransactions () )
+            ( { model
+                | editSettingsState = editSettingsState
+                , settingsStatus = SettingsLoaded
+                , currentPage = List
+                , infScroll = IS.startLoading model.infScroll
+              }
+            , getTransactions defaultGetTransactionsRequest
+            )
 
         GotFirstRun ->
             let
@@ -170,16 +203,17 @@ update msg model =
                 ( editTransactionState, cmd, close ) =
                     EditTransaction.update txnMsg model.editTransactionState
 
-                ( page, ourCmd ) =
+                ( page, ourCmd, transactions ) =
                     if close then
-                        ( List, getTransactions () )
+                        ( List, getTransactions defaultGetTransactionsRequest, [] )
 
                     else
-                        ( model.currentPage, Cmd.none )
+                        ( model.currentPage, Cmd.none, model.transactions )
             in
             ( { model
                 | editTransactionState = editTransactionState
                 , currentPage = page
+                , transactions = transactions
               }
             , Cmd.batch [ cmd |> Cmd.map EditTransactionMsg, ourCmd ]
             )
@@ -201,11 +235,15 @@ update msg model =
                         model.currentPage
 
                 ( transactions, listItems ) =
-                    if settingsMsg == DeleteAllConfirmed then
-                        ( [], [] )
+                    case settingsMsg of
+                        DeleteAllConfirmed ->
+                            ( [], [] )
 
-                    else
-                        ( model.transactions, model.listItems )
+                        TransactionsImported ->
+                            ( [], [] )
+
+                        _ ->
+                            ( model.transactions, model.listItems )
 
                 ( accounts, frequentDescriptions ) =
                     if settingsMsg == DeleteAllConfirmed then
@@ -220,6 +258,13 @@ update msg model =
 
                     else
                         ( model.settingsStatus, editSettingsState.showCancelButton )
+
+                extraCmd =
+                    if settingsMsg == TransactionsImported then
+                        getTransactions defaultGetTransactionsRequest
+
+                    else
+                        Cmd.none
             in
             ( { model
                 | editSettingsState = { editSettingsState | showCancelButton = showCancelButton }
@@ -230,11 +275,26 @@ update msg model =
                 , listItems = listItems
                 , frequentDescriptions = frequentDescriptions
               }
-            , cmd |> Cmd.map EditSettingsMsg
+            , Cmd.batch [ cmd |> Cmd.map EditSettingsMsg, extraCmd ]
             )
 
-        GotTransactions (Ok transactions) ->
+        GotTransactions (Ok transactionsResponse) ->
             let
+                newTransactions =
+                    transactionsResponse.results
+
+                nextPageCommand : Maybe (IS.LoadMoreCmd msg)
+                nextPageCommand =
+                    transactionsResponse.nextPageToken |> Maybe.map buildLoadMoreCommand
+
+                infScroll =
+                    model.infScroll
+                        |> IS.stopLoading
+                        |> IS.loadMoreCmd (nextPageCommand |> withDefault (\_ -> Cmd.none))
+
+                transactions =
+                    model.transactions ++ newTransactions
+
                 listItems =
                     buildListItems transactions
 
@@ -249,6 +309,8 @@ update msg model =
                 , frequentDescriptions = frequentDescriptions
                 , transactions = transactions
                 , listItems = listItems
+                , infScroll = infScroll
+                , nextPageCommand = nextPageCommand
               }
             , Cmd.none
             )
@@ -257,10 +319,17 @@ update msg model =
             ( { model | currentPage = List }, EditSettings.importSampleData () )
 
         ImportedSample ->
-            ( model, getTransactions () )
+            ( { model | transactions = [] }, getTransactions defaultGetTransactionsRequest )
 
         DeletedAllData ->
             ( initialModel, initialize () )
+
+        InfiniteScrollMsg msg_ ->
+            let
+                ( infScroll, cmd ) =
+                    IS.update InfiniteScrollMsg msg_ model.infScroll
+            in
+            ( { model | infScroll = infScroll }, cmd )
 
         _ ->
             ( model, Cmd.none )
@@ -357,40 +426,76 @@ cyAttr name =
 
 view : Model -> Html Msg
 view model =
-    div [ class "ui container" ]
-        [ renderPage model ]
+    let
+        ( mainContent, bottomBar ) =
+            renderPage model
+
+        scrollListener : List (Html.Attribute Msg)
+        scrollListener =
+            case model.nextPageCommand of
+                Just _ ->
+                    [ IS.infiniteScroll InfiniteScrollMsg ]
+
+                _ ->
+                    []
+    in
+    div []
+        [ div
+            (class "ui attached segment main-content" :: scrollListener)
+            [ mainContent ]
+        , div [ class "ui bottom attached menu" ]
+            bottomBar
+        ]
 
 
-renderPage : Model -> Html Msg
+renderPage : Model -> ( Html Msg, List (Html Msg) )
 renderPage model =
     case model.currentPage of
         Welcome ->
-            viewWelcome model
+            let
+                ( mainContent, bottomBar ) =
+                    viewWelcome model
+            in
+            ( mainContent, bottomBar )
 
         List ->
             if List.isEmpty model.transactions then
-                viewEmptyList
+                ( viewEmptyList, [] )
 
             else
                 viewListItems model
 
         Edit ->
-            EditTransaction.viewForm model.editTransactionState |> Html.map EditTransactionMsg
+            let
+                ( mainContent, bottomBar ) =
+                    EditTransaction.viewForm model.editTransactionState
+            in
+            ( mainContent |> Html.map EditTransactionMsg, bottomBar |> List.map (Html.map EditTransactionMsg) )
 
         EditSettings ->
-            EditSettings.viewForm model.editSettingsState |> Html.map EditSettingsMsg
+            let
+                ( mainContent, bottomBar ) =
+                    EditSettings.viewForm model.editSettingsState
+            in
+            ( mainContent |> Html.map EditSettingsMsg, bottomBar |> List.map (Html.map EditSettingsMsg) )
 
 
-viewWelcome : Model -> Html Msg
+viewWelcome : Model -> ( Html Msg, List (Html Msg) )
 viewWelcome model =
-    div [ class "container" ]
+    let
+        ( form, bottomBar ) =
+            EditSettings.viewForm model.editSettingsState
+    in
+    ( div [ class "container" ]
         [ h2 [ class "ui icon header middle aligned" ]
             [ i [ class "money icon" ] []
             , div [ class "content" ] [ text "Welcome to Elm Expenses!" ]
             , div [ class "sub header" ] [ text "This is a work in progress" ]
             ]
-        , EditSettings.viewForm model.editSettingsState |> Html.map EditSettingsMsg
+        , form |> Html.map EditSettingsMsg
         ]
+    , bottomBar |> List.map (Html.map EditSettingsMsg)
+    )
 
 
 viewEmptyList : Html Msg
@@ -411,9 +516,9 @@ viewEmptyList =
         ]
 
 
-viewListItems : Model -> Html Msg
+viewListItems : Model -> ( Html Msg, List (Html Msg) )
 viewListItems model =
-    div [ class "ui celled list relaxed" ]
+    ( div [ class "ui celled list relaxed" ]
         (List.map
             (\item ->
                 case item of
@@ -424,12 +529,21 @@ viewListItems model =
                         viewDate date
             )
             model.listItems
-            ++ [ button [ class "massive circular ui blue icon button fab", cyAttr "add-transaction", onClick (SetPage Edit) ]
-                    [ i [ class "plus icon" ] [] ]
-               , button [ class "massive circular ui icon button fab-left", cyAttr "settings", onClick (SetPage EditSettings) ]
-                    [ i [ class "settings icon" ] [] ]
-               ]
         )
+    , [ div [ class "item" ]
+            [ div [ class "ui icon button", cyAttr "settings", onClick (SetPage EditSettings) ]
+                [ i [ class "settings icon" ] []
+                ]
+            ]
+      , div [ class "right menu" ]
+            [ div [ class "item" ]
+                [ div [ class "ui primary button", cyAttr "add-transaction", onClick (SetPage Edit) ]
+                    [ text "New"
+                    ]
+                ]
+            ]
+      ]
+    )
 
 
 viewDate : Date -> Html Msg
@@ -553,10 +667,28 @@ getSettingsFormInput state =
         , newPassword = ""
         , newPasswordConfirm = ""
         }
+    , error = Nothing
     , results = Nothing
     , showCancelButton = True
-    , saving = False
+    , working = EditSettings.NotWorking
     }
+
+
+buildLoadMoreCommand : String -> (a -> Cmd msg)
+buildLoadMoreCommand pageToken =
+    \_ -> getTransactions { defaultGetTransactionsRequest | pageToken = Just pageToken }
+
+
+transactionsResponseDecoder : Json.Decode.Decoder GetTransactionsResponse
+transactionsResponseDecoder =
+    Json.Decode.succeed GetTransactionsResponse
+        |> required "results" transactionsDecoder
+        |> optional "nextPageToken" (Json.Decode.nullable Json.Decode.string) Nothing
+
+
+decodeTransactionsResponse : Json.Decode.Value -> Result Json.Decode.Error GetTransactionsResponse
+decodeTransactionsResponse jsonData =
+    Json.Decode.decodeValue transactionsResponseDecoder jsonData
 
 
 
@@ -566,7 +698,7 @@ getSettingsFormInput state =
 port initialize : () -> Cmd msg
 
 
-port getTransactions : () -> Cmd msg
+port getTransactions : GetTransactionsRequest -> Cmd msg
 
 
 
@@ -619,7 +751,7 @@ stringDecoder =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ gotTransactions (decodeTransactions >> GotTransactions)
+        [ gotTransactions (decodeTransactionsResponse >> GotTransactions)
         , gotInitOk (decodeSettings >> InitOk)
         , gotInitError (stringDecoder >> InitError)
         , gotFirstRun (\_ -> GotFirstRun)
@@ -639,6 +771,8 @@ subscriptions _ =
         , Sub.map EditSettingsMsg (EditSettings.gotEncryptedSettings (\_ -> EditSettings.GotEncryptedSettings))
         , Sub.map EditSettingsMsg (EditSettings.decryptedSettingsError (\_ -> EditSettings.GotDecryptionError))
         , Sub.map EditSettingsMsg (EditSettings.decryptedSettings (stringDecoder >> EditSettings.GotDecryptionSuccess))
+        , Sub.map EditSettingsMsg (EditSettings.transactionsImportedError (stringDecoder >> EditSettings.TransactionsImportedError))
+        , Sub.map EditSettingsMsg (EditSettings.transactionsImported (\_ -> EditSettings.TransactionsImported))
         ]
 
 

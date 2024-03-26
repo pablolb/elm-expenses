@@ -50,6 +50,17 @@ Cypress.Commands.add(
 )
 
 Cypress.Commands.add(
+    'saveTransactions',
+    (transactions) => {
+        cy.window()
+        .its('ElmExpenses')
+        .then(
+            ElmExpenses => ElmExpenses.saveTransactions(transactions)
+        )
+    }
+)
+
+Cypress.Commands.add(
     'readRawDataFromDb',
     (name) => cy.window().its('ElmExpenses').then(e => e.readRawDataFromDb(name))
 )
