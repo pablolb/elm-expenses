@@ -185,7 +185,7 @@ update msg model =
                 | currentPage = EditSettings
                 , editSettingsState = getSettingsFormInput model.editSettingsState
               }
-            , Cmd.none
+            , initializeMenus ()
             )
 
         SetPage page ->
@@ -439,11 +439,11 @@ view model =
                 _ ->
                     []
     in
-    div []
+    div [ class "container" ]
         [ div
             (class "ui attached segment main-content" :: scrollListener)
             [ mainContent ]
-        , div [ class "ui bottom attached menu" ]
+        , div [ class "ui bottom attached menu bottom-bar" ]
             bottomBar
         ]
 
@@ -699,6 +699,9 @@ port initialize : () -> Cmd msg
 
 
 port getTransactions : GetTransactionsRequest -> Cmd msg
+
+
+port initializeMenus : () -> Cmd msg
 
 
 

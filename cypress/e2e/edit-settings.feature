@@ -40,16 +40,19 @@ Feature: Users should be able to edit settings
         Then I see "ARS 199,000.00"
 
     Scenario: I can import sample data
-        When I click the "Import Sample" button
+        When I click on "More"
+        And I click the "Import Sample" button
         Then I see "Holiday travel expenses"
 
     Scenario: I can delete all data
-        When I click the "Delete All Data" button
+        When I click on "More"
+        And I click the "Delete All Data" button
         And I answer "yes" in the confirmation message
         Then the text "Welcome to Elm Expenses!" should exist
 
     Scenario: I can cancel when deleting all data
-        When I click the "Delete All Data" button
+        When I click on "More"
+        And I click the "Delete All Data" button
         And I answer "no" in the confirmation message
         Then I see the "Delete All Data" button
 

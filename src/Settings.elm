@@ -22,7 +22,7 @@ port module Settings exposing
 
 import File exposing (File)
 import File.Select as Select
-import Html exposing (Html, button, div, form, i, input, label, p, text, textarea)
+import Html exposing (Html, button, div, form, i, input, label, p, span, text, textarea)
 import Html.Attributes exposing (attribute, class, classList, name, placeholder, title, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Json.Decode
@@ -350,27 +350,38 @@ viewFormDecrypted model =
             else
                 "folder open icon"
 
+        workingIcon : Html Msg
+        workingIcon =
+            if model.working == Importing then
+                div [ class "item" ]
+                    [ i [ class "loading spinner icon" ] []
+                    ]
+
+            else
+                span [] []
+
         otherButtons =
             if model.showCancelButton then
                 [ div [ class "item" ] [ div [ class "ui button", cyAttr "cancel", onClick Cancel ] [ text "Cancel" ] ]
-                , div [ class "item" ]
-                    [ div [ class "ui basic button", cyAttr "import-sample", onClick ImportSample ]
-                        [ i [ class "angle double down icon" ] []
-                        , text "Import sample"
+                , div [ class "ui dropdown item needs-js-menu" ]
+                    [ text "More"
+                    , i [ class "caret up icon" ] []
+                    , div [ class "menu" ]
+                        [ div [ class "item", cyAttr "import-sample", onClick ImportSample ]
+                            [ i [ class "angle double down icon" ] []
+                            , text "Import sample"
+                            ]
+                        , div [ class "item", cyAttr "import-sample", classList [ ( "disabled", model.working /= NotWorking ) ], cyAttr "import-json", onClick JsonRequested ]
+                            [ i [ class "folder open icon" ] []
+                            , text "Import JSON"
+                            ]
+                        , div [ class "item", cyAttr "delete-all-data", onClick DeleteAllRequested ]
+                            [ i [ class "delete icon" ] []
+                            , text "Deleta ALL data"
+                            ]
                         ]
                     ]
-                , div [ class "item" ]
-                    [ div [ class "ui basic button", classList [ ( "disabled", model.working /= NotWorking ) ], cyAttr "import-json", onClick JsonRequested ]
-                        [ i [ class importIcon ] []
-                        , text "Import JSON"
-                        ]
-                    ]
-                , div [ class "item" ]
-                    [ div [ class "ui negative button", cyAttr "delete-all-data", onClick DeleteAllRequested ]
-                        [ i [ class "delete icon" ] []
-                        , text "Delete ALL"
-                        ]
-                    ]
+                , workingIcon
                 ]
 
             else

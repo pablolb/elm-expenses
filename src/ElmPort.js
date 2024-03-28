@@ -142,6 +142,13 @@ function buildGlue(app, dbPortIn) {
           .modal('show');
       });
 
+      app.ports.initializeMenus.subscribe(function() {
+        requestAnimationFrame(function() {
+          $('.needs-js-menu').dropdown();
+        });
+      });
+
+
     return {
         setDbPort(newDbPort) {
             dbPort = newDbPort;

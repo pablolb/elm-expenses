@@ -181,15 +181,20 @@ class EncryptedDb extends Db {
         return this.db.get(id).then(enc => this.encryption.decrypt(enc));
     }
 
-    async allDocs(...params) {
-        const result = await this.db.allDocs(...params);
+    async allDocs(options) {
+        let truncate = null;
+        if (options && options.limit !== undefined) {
+            truncate = options.limit;
+            options.limit += 1;
+        }
+        const result = await this.db.allDocs(options);
         const rows = result.rows.filter(row => row.id != ENCRYPTED_ID);
         for (const row of rows) {
             if (row.doc) {
                 row.doc = await this.encryption.decrypt(row.doc);
             }
         }
-        result.rows = rows;
+        result.rows = truncate ? rows.slice(0, truncate) : rows;
         return result;
     }
 

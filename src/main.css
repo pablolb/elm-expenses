@@ -9,29 +9,21 @@
   height: inherit;
 }
 
-/********
-https://gist.github.com/nicolaskopp/637aa4e20c66fe41a6ea2a0773935f6e
-*/
- :root                  { box-sizing: border-box; }
- *, *::before, *::after { box-sizing: inherit; }
- 
- :root, body {
-   margin: 0;
-   padding: 0;
-   border: initial;
- }
- 
- body {
-   overflow: hidden;
-   width: 100lvw;
-   height: 100lvh;
- }
-/*********/
-
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
 .main-content {
-  overflow-y: scroll;
-  height: calc(100vh - 50px)
+  flex: 1; /* Grow to fill remaining space */
+  overflow-y: auto; /* Enable vertical scrolling */
+  overscroll-behavior: contain; /* Prevent body scrolling */
+}
+
+.bottom-bar {
+  flex-shrink: 0; /* Do not shrink */
+  display: flex;
 }
 
 div.date {
