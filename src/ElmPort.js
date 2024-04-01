@@ -142,6 +142,23 @@ function buildGlue(app, dbPortIn) {
           .modal('show');
       });
 
+      app.ports.sync.subscribe(async function (settings) {
+        try {
+          const info = await dbPort.sync(settings);
+          if (info.push.ok && info.pull.ok) {
+            app.ports.syncFinished.send({
+              sent: info.push.docs_written,
+              received: info.pull.docs_read
+            });
+          } else {
+            console.error(info);
+            app.ports.syncFailed.send();  
+          }          
+        } catch (e) {
+          app.ports.syncFailed.send();
+        }        
+      });
+
       app.ports.initializeMenus.subscribe(function() {
         requestAnimationFrame(function() {
           $('.needs-js-menu').dropdown();

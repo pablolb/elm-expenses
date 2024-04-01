@@ -1,4 +1,16 @@
-const { Then } = require("@badeball/cypress-cucumber-preprocessor")
+const { When, Then } = require("@badeball/cypress-cucumber-preprocessor")
+
+When('I toggle use encryption', () => {
+    cy.get('[data-cy="toggle-encryption"]').click()
+})
+
+Then('the use encryption toggle is on', () => {
+    cy.get('[data-cy="toggle-encryption"]').should('be.checked')
+})
+
+Then('the use encryption toggle is off', () => {
+    cy.get('[data-cy="toggle-encryption"]').should('not.be.checked')
+})
 
 Then('there are no unencrypted documents in PouchDB named {string}', (name) => {
     cy.readRawDataFromDb(name).then(docs => {

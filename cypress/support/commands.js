@@ -8,9 +8,36 @@ Cypress.Commands.add(
     }, password))
 )
 
+const replicationSettings = {
+    url: "memory://remotedb",
+    username: "anything",
+    password: "anything"
+}
+
+Cypress.Commands.add(
+    'createReplicationSettings',
+    (password = null) => cy.window().its('ElmExpenses').then(e => e.saveSettings({
+        version: "",
+        defaultCurrency: "USD",
+        destinationAccounts: [ "Expenses:Groceries", "Expenses:Eat Out & Take Away" ],
+        sourceAccounts: [ "Assets:Cash", "Assets:Bank:Checking", "Liabilities:CreditCard" ],
+        replication: replicationSettings
+    }, password))
+)
+
+Cypress.Commands.add(
+    'syncWithRemote',
+    () => cy.window().its('ElmExpenses').then(e => e.syncWithRemote(replicationSettings))
+)
+
 Cypress.Commands.add(
     'importSampleData',
     () => cy.window().its('ElmExpenses').then(e => e.importSampleData())
+)
+
+Cypress.Commands.add(
+    'deleteDataDb',
+    () => cy.window().its('ElmExpenses').then(e => e.deleteDataDb())
 )
 
 Cypress.Commands.add(

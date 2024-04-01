@@ -2,6 +2,73 @@ module Misc exposing (..)
 
 import Html exposing (Html, div, i, node, option, p, text)
 import Html.Attributes exposing (attribute, class, id, value)
+import Html.Events exposing (onClick)
+
+
+type MainNotification
+    = MainNotification NotificationData
+
+
+type PopupNotification
+    = PopupNotification NotificationData
+
+
+type Notification
+    = Notification MainNotification
+    | Popup PopupNotification
+
+
+type NotificationType
+    = NormalNotification
+    | NegativeMessage
+    | PositiveMessage
+
+
+type alias NotificationData =
+    { type_ : NotificationType
+    , header : Maybe String
+    , message : String
+    }
+
+
+viewNotification : Notification -> msg -> Html msg
+viewNotification notification onClose =
+    let
+        ( messageClass, data ) =
+            case notification of
+                Notification (MainNotification notificationData) ->
+                    ( "attached message", notificationData )
+
+                Popup (PopupNotification notificationData) ->
+                    ( "message", notificationData )
+
+        typeClass =
+            case data.type_ of
+                NegativeMessage ->
+                    "negative"
+
+                PositiveMessage ->
+                    "positive"
+
+                NormalNotification ->
+                    ""
+
+        mainClass =
+            "ui " ++ typeClass ++ " " ++ messageClass
+
+        header =
+            case data.header of
+                Just txt ->
+                    div [ class "header" ] [ text txt ]
+
+                Nothing ->
+                    div [] []
+    in
+    div [ class mainClass ]
+        [ i [ class "close icon", onClick onClose ] []
+        , header
+        , p [] [ text data.message ]
+        ]
 
 
 isFieldNotBlank : String -> String -> Result String String

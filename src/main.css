@@ -26,6 +26,18 @@
   display: flex;
 }
 
+.app-loading {
+  height: 100%
+}
+
+.popup-notification {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  z-index: 999;
+}
+
 div.date {
   background-color: #ebeaea;
   padding-top: 4px;

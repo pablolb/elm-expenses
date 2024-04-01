@@ -87,6 +87,10 @@ Then('I see the "Cancel" button', () => cy.get('[data-cy="cancel"]').should('exi
 Then('I see the "Import Sample" button', () => cy.get('[data-cy="import-sample"]').should('exist'))
 Then('I see the "Delete All Data" button', () => cy.get('[data-cy="delete-all-data"]').should('exist'))
 
+Then('I see {int} transactions', number => {
+    cy.get('div').filter('.txn-description').should('have.lengthOf', number)
+})
+
 
 When('I set the default currency to "{word}"', currency => {
     cy.get('[data-cy="default-currency"]').clear().type(currency)
@@ -114,6 +118,26 @@ When('I set the new password confirmation to {string}', password => {
     cy.get('[data-cy="new-password-confirm"]').clear().type(password)
 })
 
+When('I toggle use replication', () => {
+    cy.get('[data-cy="toggle-replication"]').click()
+})
+
+When('I set the replication URL to {string}', url => {
+    cy.get('[data-cy="replication-url"]').clear().type(url)
+})
+
+When('I set the replication username to {string}', username => {
+    cy.get('[data-cy="replication-username"]').clear().type(username)
+})
+
+When('I set the replication password to {string}', password => {
+    cy.get('[data-cy="replication-password"]').clear().type(password)
+})
+
+When('I press the sync icon button', () => {
+    cy.get('[data-cy="sync"]').click()
+})
+
 When("I save my settings", () => cy.get('[data-cy="save"]').click())
 
 Then('the default currency is "{word}"', currency => cy.get('[data-cy="default-currency"]').should('have.value', currency))
@@ -130,4 +154,20 @@ Then(/^the source accounts are:$/, table => {
 
 Then("I see an error message {string}", text => {
     cy.get('div.error.message').children().should('contain.text', text)
+})
+
+Then('the sync icon button is not present', () => {
+    cy.get('[data-cy="sync"]').should('not.exist')
+})
+
+Then('the sync icon button is present', () => {
+    cy.get('[data-cy="sync"]').should('exist')
+})
+
+Then('the use replication toggle is on', () => {
+    cy.get('[data-cy="toggle-replication"]').should('be.checked')
+})
+
+Then('the use replication toggle is off', () => {
+    cy.get('[data-cy="toggle-replication"]').should('not.be.checked')
 })

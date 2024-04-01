@@ -13,6 +13,7 @@ This is an ongoing series of learning Elm by example.
 11. In part eleven we add encryption ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-11/), [example](https://pablolb.github.io/elm-expenses/part-11/), [example with debugger](https://pablolb.github.io/elm-expenses/part-11-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-11)).
 12. In part twelve we add import-from-json and infinite scroll ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-12/), [example](https://pablolb.github.io/elm-expenses/part-12/), [example with debugger](https://pablolb.github.io/elm-expenses/part-12-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-12)).
 13. In part thirteen we fix bugs from part twelve ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-13/), [example](https://pablolb.github.io/elm-expenses/part-13/), [example with debugger](https://pablolb.github.io/elm-expenses/part-13-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-13)).
+14. In part fourteen we add replication and notifications ([post](https://blog.mrbelloc.dev/posts/trying-out-elm-14/), [example](https://pablolb.github.io/elm-expenses/part-14/), [example with debugger](https://pablolb.github.io/elm-expenses/part-14-debug/), [code](https://github.com/pablolb/elm-expenses/tree/part-14)).
 
 ## Running locally
 

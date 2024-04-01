@@ -1,6 +1,9 @@
 import {isEncrypted, buildEncryption} from './EncryptionTransformation';
 import PouchDb from 'pouchdb-browser';
 import { DecryptionError } from './encryption';
+import MemoryAdapter from 'pouchdb-adapter-memory';
+
+PouchDb.plugin(MemoryAdapter);
 
 
 const ENCRYPTED_ID = "encryption-mark";
@@ -65,6 +68,22 @@ class NotEmpty extends Error {
       }
 }
 
+function getSyncUrl(settings) {
+    const url = new URL(settings.url);
+    url.username = settings.username;
+    url.password = settings.password;
+    return url.href;
+}
+
+function remoteDb(settings) {
+    if (settings.url.startsWith('pouchdb://')) {
+        return new PouchDb(settings.url.substr(10));
+    }
+    if (settings.url.startsWith('memory://')) {
+        return new PouchDb(settings.url.substr(9), {adapter: 'memory'});
+    }
+    return new PouchDb(getSyncUrl(settings));
+}
 
 class Db {
     constructor(name) {
@@ -135,6 +154,16 @@ class Db {
         // no-op
         return Promise.resolve();
     }
+
+    oneShotSync(settings) {
+        const remote = remoteDb(settings);
+        return new Promise((resolve, reject) => {
+            this.db.sync(remote)
+                .on('complete', info => resolve(info))
+                .on('error', error => reject(error))
+        });
+    }
+
 }
 
 class EncryptedDb extends Db {

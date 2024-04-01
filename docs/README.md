@@ -17,3 +17,4 @@ You can start by reading the [first post of the series](https://blog.mrbelloc.de
 | [Encryption](https://blog.mrbelloc.dev/posts/trying-out-elm-11/)                    | [link](https://pablolb.github.io/elm-expenses/part-11/) | [link](https://pablolb.github.io/elm-expenses/part-11-debug/) |
 | [Import JSON & Infinite scroll](https://blog.mrbelloc.dev/posts/trying-out-elm-12/) | [link](https://pablolb.github.io/elm-expenses/part-12/) | [link](https://pablolb.github.io/elm-expenses/part-12-debug/) |
 | [Bug fixes](https://blog.mrbelloc.dev/posts/trying-out-elm-13/)                     | [link](https://pablolb.github.io/elm-expenses/part-13/) | [link](https://pablolb.github.io/elm-expenses/part-13-debug/) |
+| [Replication & Notifications](https://blog.mrbelloc.dev/posts/trying-out-elm-14/)   | [link](https://pablolb.github.io/elm-expenses/part-14/) | [link](https://pablolb.github.io/elm-expenses/part-14-debug/) |

@@ -37,12 +37,28 @@ class DevApi {
         await this.dbPort.saveTransactions(buildSample());
     }
 
+    async deleteDataDb() {
+        await this.dbPort.deleteDataDb();
+        const dbPort = new DbPort();
+        await dbPort.openDbs();
+        this.dbPort = dbPort;
+        this.onNewDbPort(dbPort);
+    }
+
     async deleteAllData() {
         await this.dbPort.deleteAllData();
         const dbPort = new DbPort();
         await dbPort.openDbs();
         this.dbPort = dbPort;
         this.onNewDbPort(dbPort);
+    }
+
+    syncWithRemote(settings) {
+        return this.dbPort.sync(settings)
+    }
+
+    importJson(json) {
+        this.appPorts.gotE2EJsonLoaded.send(json);
     }
 
     readRawDataFromDb(name) {

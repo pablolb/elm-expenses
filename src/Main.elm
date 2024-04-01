@@ -6,15 +6,26 @@ import Dict exposing (Dict)
 import EditTransaction exposing (FrequentDescription, FrequentDescriptions)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, button, div, h2, i, text)
-import Html.Attributes exposing (attribute, class, name)
+import Html exposing (Html, button, div, h2, i, p, text)
+import Html.Attributes exposing (attribute, class, classList, name)
 import Html.Events exposing (onClick)
 import InfiniteScroll as IS
 import Json.Decode
 import Json.Decode.Pipeline exposing (optional, required)
 import List.Extra
 import Maybe exposing (withDefault)
-import Settings as EditSettings exposing (Msg(..), Settings, decodeSettings)
+import Misc
+    exposing
+        ( MainNotification(..)
+        , Notification(..)
+        , NotificationData
+        , NotificationType(..)
+        , PopupNotification(..)
+        , isSomething
+        , viewNotification
+        )
+import Process
+import Settings as EditSettings exposing (EncryptionStatus(..), Msg(..), ReplicationSettings, Settings, decodeSettings)
 import Task
 import Time exposing (Month(..))
 import Transactions exposing (Entry, Transaction, transactionDecoder, transactionsDecoder)
@@ -36,6 +47,9 @@ type alias Model =
     , settingsStatus : SettingsStatus
     , currentDate : Date
     , currentPage : Page
+    , replicating : Bool
+    , notification : Maybe MainNotification
+    , popupNotification : Maybe PopupNotification
     }
 
 
@@ -55,7 +69,8 @@ type ListItem
 
 
 type Page
-    = Welcome
+    = AppLoading
+    | Welcome
     | List
     | Edit
     | EditSettings
@@ -86,6 +101,12 @@ type alias GetTransactionsResponse =
     }
 
 
+type alias SyncResult =
+    { sent : Int
+    , received : Int
+    }
+
+
 
 ---- FORM STUFF ----
 
@@ -102,7 +123,10 @@ initialModel =
     , editSettingsState = EditSettings.emptyState
     , settingsStatus = SettingsUnknown
     , currentDate = Date.fromCalendarDate 2024 Jan 1
-    , currentPage = Welcome
+    , currentPage = AppLoading
+    , replicating = False
+    , notification = Nothing
+    , popupNotification = Nothing
     }
 
 
@@ -120,12 +144,19 @@ type Msg
     | SetPage Page
     | EditTransaction Transaction
     | GotFirstRun
+    | ImportJson
     | ImportSample
     | ImportedSample
     | DeletedAllData
+    | DismissPopupNotification
+    | DismissNotification
+    | SyncRequested
+    | SyncFinished (Result Json.Decode.Error SyncResult)
+    | SyncFailed
     | EditTransactionMsg EditTransaction.Msg
     | EditSettingsMsg EditSettings.Msg
     | InfiniteScrollMsg IS.Msg
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -231,6 +262,9 @@ update msg model =
                         else
                             List
 
+                    else if settingsMsg == GotEncryptedSettings then
+                        Welcome
+
                     else
                         model.currentPage
 
@@ -321,8 +355,76 @@ update msg model =
         ImportedSample ->
             ( { model | transactions = [] }, getTransactions defaultGetTransactionsRequest )
 
+        ImportJson ->
+            ( { model
+                | currentPage = EditSettings
+                , editSettingsState = getSettingsFormInput model.editSettingsState
+              }
+            , EditSettings.requestImportJson (\f -> EditSettingsMsg (JsonSelected f))
+            )
+
         DeletedAllData ->
             ( initialModel, initialize () )
+
+        SyncRequested ->
+            let
+                ( replicating, cmd ) =
+                    case model.editSettingsState.settings.replication of
+                        Just settings ->
+                            ( True, sync settings )
+
+                        Nothing ->
+                            ( False, Cmd.none )
+            in
+            ( { model | replicating = replicating }, cmd )
+
+        SyncFinished (Ok results) ->
+            let
+                message =
+                    "↑ Sent: " ++ String.fromInt results.sent ++ "  /  ↓ Received: " ++ String.fromInt results.received
+
+                popupNotification : NotificationData
+                popupNotification =
+                    NotificationData PositiveMessage (Just "Synched OK") message
+
+                dismissCmd : Cmd Msg
+                dismissCmd =
+                    delayMillis 5000 DismissPopupNotification
+
+                cmd : Cmd Msg
+                cmd =
+                    if results.received > 0 then
+                        Cmd.batch [ getTransactions defaultGetTransactionsRequest, dismissCmd ]
+
+                    else
+                        dismissCmd
+            in
+            ( { model
+                | replicating = False
+                , popupNotification = Just (PopupNotification popupNotification)
+              }
+            , cmd
+            )
+
+        SyncFailed ->
+            let
+                message =
+                    "Could not synchronize"
+
+                notificationData : NotificationData
+                notificationData =
+                    NotificationData NegativeMessage (Just "Synchronization Error") message
+
+                notification =
+                    MainNotification notificationData
+            in
+            ( { model | replicating = False, notification = Just notification }, Cmd.none )
+
+        DismissNotification ->
+            ( { model | notification = Nothing }, Cmd.none )
+
+        DismissPopupNotification ->
+            ( { model | popupNotification = Nothing }, Cmd.none )
 
         InfiniteScrollMsg msg_ ->
             let
@@ -440,7 +542,9 @@ view model =
                     []
     in
     div [ class "container" ]
-        [ div
+        [ viewMainNotification model.notification
+        , viewPopupNotification model.popupNotification
+        , div
             (class "ui attached segment main-content" :: scrollListener)
             [ mainContent ]
         , div [ class "ui bottom attached menu bottom-bar" ]
@@ -448,9 +552,33 @@ view model =
         ]
 
 
+viewMainNotification : Maybe MainNotification -> Html Msg
+viewMainNotification maybeNotification =
+    case maybeNotification of
+        Nothing ->
+            div [] []
+
+        Just notification ->
+            viewNotification (Notification notification) DismissNotification
+
+
+viewPopupNotification : Maybe PopupNotification -> Html Msg
+viewPopupNotification maybeNotification =
+    case maybeNotification of
+        Nothing ->
+            div [] []
+
+        Just notification ->
+            div [ class "popup-notification" ]
+                [ viewNotification (Popup notification) DismissPopupNotification ]
+
+
 renderPage : Model -> ( Html Msg, List (Html Msg) )
 renderPage model =
     case model.currentPage of
+        AppLoading ->
+            ( viewAppLoading, [] )
+
         Welcome ->
             let
                 ( mainContent, bottomBar ) =
@@ -460,7 +588,7 @@ renderPage model =
 
         List ->
             if List.isEmpty model.transactions then
-                ( viewEmptyList, [] )
+                viewEmptyList model
 
             else
                 viewListItems model
@@ -478,6 +606,11 @@ renderPage model =
                     EditSettings.viewForm model.editSettingsState
             in
             ( mainContent |> Html.map EditSettingsMsg, bottomBar |> List.map (Html.map EditSettingsMsg) )
+
+
+viewAppLoading : Html Msg
+viewAppLoading =
+    div [ class "ui loading segment app-loading" ] [ p [] [] ]
 
 
 viewWelcome : Model -> ( Html Msg, List (Html Msg) )
@@ -498,9 +631,9 @@ viewWelcome model =
     )
 
 
-viewEmptyList : Html Msg
-viewEmptyList =
-    div [ class "container" ]
+viewEmptyList : Model -> ( Html Msg, List (Html Msg) )
+viewEmptyList model =
+    ( div [ class "container" ]
         [ h2 [ class "ui icon header middle aligned" ]
             [ i [ class "money icon" ] []
             , div [ class "content" ] [ text "Welcome to Elm Expenses!" ]
@@ -510,10 +643,12 @@ viewEmptyList =
             [ button [ class "ui positive button", cyAttr "import-sample", onClick ImportSample ]
                 [ text "Import Sample" ]
             , div [ class "ui horizontal divider" ] [ text "Or" ]
-            , button [ class "blue ui button", cyAttr "add-transaction", onClick (SetPage Edit) ]
-                [ text "Add Transaction" ]
+            , button [ class "ui blue button", cyAttr "import-json", onClick ImportJson ]
+                [ text "Import JSON" ]
             ]
         ]
+    , viewBottomBar model
+    )
 
 
 viewListItems : Model -> ( Html Msg, List (Html Msg) )
@@ -530,20 +665,53 @@ viewListItems model =
             )
             model.listItems
         )
-    , [ div [ class "item" ]
-            [ div [ class "ui icon button", cyAttr "settings", onClick (SetPage EditSettings) ]
-                [ i [ class "settings icon" ] []
-                ]
+    , viewBottomBar model
+    )
+
+
+viewBottomBar : Model -> List (Html Msg)
+viewBottomBar model =
+    let
+        syncItem =
+            case model.editSettingsState.settings.replication of
+                Nothing ->
+                    []
+
+                Just _ ->
+                    let
+                        ( icon, msg ) =
+                            if model.replicating then
+                                ( "loading spinner icon", NoOp )
+
+                            else
+                                ( "sync icon", SyncRequested )
+                    in
+                    [ div [ class "item" ]
+                        [ div
+                            [ class "ui icon button"
+                            , classList [ ( "disabled", model.replicating ) ]
+                            , cyAttr "sync"
+                            , onClick msg
+                            ]
+                            [ i [ class icon ] []
+                            ]
+                        ]
+                    ]
+    in
+    div [ class "item" ]
+        [ div [ class "ui icon button", cyAttr "settings", onClick (SetPage EditSettings) ]
+            [ i [ class "settings icon" ] []
             ]
-      , div [ class "right menu" ]
-            [ div [ class "item" ]
-                [ div [ class "ui primary button", cyAttr "add-transaction", onClick (SetPage Edit) ]
-                    [ text "New"
+        ]
+        :: syncItem
+        ++ [ div [ class "right menu" ]
+                [ div [ class "item" ]
+                    [ div [ class "ui primary button", cyAttr "add-transaction", onClick (SetPage Edit) ]
+                        [ text "New"
+                        ]
                     ]
                 ]
-            ]
-      ]
-    )
+           ]
 
 
 viewDate : Date -> Html Msg
@@ -664,8 +832,13 @@ getSettingsFormInput state =
         , destinationAccounts = String.join "\n" settings.destinationAccounts
         , sourceAccounts = String.join "\n" settings.sourceAccounts
         , currentPassword = ""
+        , encryption = state.inputs.encryption
         , newPassword = ""
         , newPasswordConfirm = ""
+        , replication = state.settings.replication |> isSomething
+        , replicationUrl = settings.replication |> Maybe.map .url |> withDefault ""
+        , replicationUsername = settings.replication |> Maybe.map .username |> withDefault ""
+        , replicationPassword = settings.replication |> Maybe.map .password |> withDefault ""
         }
     , error = Nothing
     , results = Nothing
@@ -677,6 +850,12 @@ getSettingsFormInput state =
 buildLoadMoreCommand : String -> (a -> Cmd msg)
 buildLoadMoreCommand pageToken =
     \_ -> getTransactions { defaultGetTransactionsRequest | pageToken = Just pageToken }
+
+
+delayMillis : Int -> msg -> Cmd msg
+delayMillis millis msg =
+    Process.sleep (toFloat millis)
+        |> Task.perform (\_ -> msg)
 
 
 transactionsResponseDecoder : Json.Decode.Decoder GetTransactionsResponse
@@ -699,6 +878,9 @@ port initialize : () -> Cmd msg
 
 
 port getTransactions : GetTransactionsRequest -> Cmd msg
+
+
+port sync : ReplicationSettings -> Cmd msg
 
 
 port initializeMenus : () -> Cmd msg
@@ -729,6 +911,12 @@ port importedSampleData : (Json.Decode.Value -> msg) -> Sub msg
 port deletedAllData : (Json.Decode.Value -> msg) -> Sub msg
 
 
+port syncFinished : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port syncFailed : (Json.Decode.Value -> msg) -> Sub msg
+
+
 
 ---- PROGRAM ----
 
@@ -751,6 +939,18 @@ stringDecoder =
     Json.Decode.decodeValue Json.Decode.string
 
 
+syncResultDecoder : Json.Decode.Decoder SyncResult
+syncResultDecoder =
+    Json.Decode.succeed SyncResult
+        |> required "sent" Json.Decode.int
+        |> required "received" Json.Decode.int
+
+
+decodeSyncResult : Json.Decode.Value -> Result Json.Decode.Error SyncResult
+decodeSyncResult =
+    Json.Decode.decodeValue syncResultDecoder
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
@@ -761,6 +961,8 @@ subscriptions _ =
         , gotTransactionsError (stringDecoder >> GotTransactionsError)
         , importedSampleData (\_ -> ImportedSample)
         , deletedAllData (\_ -> DeletedAllData)
+        , syncFinished (decodeSyncResult >> SyncFinished)
+        , syncFailed (\_ -> SyncFailed)
         , Sub.map EditTransactionMsg (EditTransaction.transactionSaved (Json.Decode.decodeValue transactionDecoder >> EditTransaction.TransactionSaved))
         , Sub.map EditTransactionMsg (EditTransaction.transactionSavedError (stringDecoder >> EditTransaction.TransactionSavedError))
         , Sub.map EditTransactionMsg (EditTransaction.transactionDeleted (\_ -> EditTransaction.TransactionDeleted))
@@ -776,6 +978,7 @@ subscriptions _ =
         , Sub.map EditSettingsMsg (EditSettings.decryptedSettings (stringDecoder >> EditSettings.GotDecryptionSuccess))
         , Sub.map EditSettingsMsg (EditSettings.transactionsImportedError (stringDecoder >> EditSettings.TransactionsImportedError))
         , Sub.map EditSettingsMsg (EditSettings.transactionsImported (\_ -> EditSettings.TransactionsImported))
+        , Sub.map EditSettingsMsg (EditSettings.gotE2EJsonLoaded (stringDecoder >> EditSettings.GotE2EJsonLoaded))
         ]
 
 

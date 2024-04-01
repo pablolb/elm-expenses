@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "pouchdb-adapter-memory": "^8.0.1",
     "pouchdb-browser": "^8.0.1"
   },
   "devDependencies": {

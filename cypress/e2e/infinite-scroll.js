@@ -41,10 +41,6 @@ Given('I have {int} test transactions with description Transaction1, Transaction
     return cy.saveTransactions(transactions).then(() => cy.sendTransactionsToElm())
 })
 
-Then('I see {int} transactions', number => {
-    cy.get('div').filter('.txn-description').should('have.lengthOf', number)
-})
-
 Then('no transaction is repeated', () => {
     cy.get('div').filter('.txn-description').then(($el) => {
         const descriptions = new Set()

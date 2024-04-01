@@ -186,9 +186,17 @@ class DbPort {
         await this.dataDb.bulkDocs(transactions);
     }
 
+    sync(settings) {
+        return this.dataDb.oneShotSync(settings);
+    }
 
     async deleteTransaction(id, version) {
         await this.dataDb.remove(id, version);
+    }
+
+    async deleteDataDb() {
+        await destroyDb(this.dataDbName);
+        this.dataDb = null;
     }
 
     /**
